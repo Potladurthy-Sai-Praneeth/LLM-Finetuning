@@ -16,7 +16,7 @@ from transformers import (
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from trl import SFTTrainer, SFTConfig
 
-from data_preprocessing import process_dataset
+from data_preprocessing import CustomDataset
 from inference import get_merged_model
 
 
@@ -179,9 +179,9 @@ class DistributedTrainer:
             training_args = self.get_training_args(rank, world_size)
             
             # Load dataset
-            dataset = load_dataset(self.dataset_id, split="train")
-            dataset = dataset.select(range(self.dataset_size)) 
-            dataset = process_dataset(dataset)
+            dataset = CustomDataset(load_dataset(self.dataset_id, split="train"))
+            # dataset = dataset.select(range(self.dataset_size)) 
+            # dataset = process_dataset(dataset)
             
             # Initialize trainer
             trainer = SFTTrainer(
