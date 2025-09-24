@@ -1,6 +1,5 @@
 """
 Distributed Fine-tuning Script for Vision-Language Models
-Supports both single GPU and multi-GPU training using DDP
 """
 
 import os
@@ -10,16 +9,14 @@ import torch.multiprocessing as mp
 from dotenv import load_dotenv
 from datasets import load_dataset
 from transformers import (
-    AutoTokenizer, 
     BitsAndBytesConfig, 
     AutoProcessor, 
     AutoModelForImageTextToText, 
-    AutoModelForCausalLM
 )
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from trl import SFTTrainer, SFTConfig
 
-from data_preprocessing import collate_fn
+from data_preprocessing import collate_fn,process_dataset
 from inference import get_merged_model
 
 
@@ -161,6 +158,7 @@ class DistributedTrainer:
             
             # Load dataset
             dataset = load_dataset(self.dataset_id, split="train")
+            dataset = process_dataset(dataset)
             
             # Initialize trainer
             trainer = SFTTrainer(
