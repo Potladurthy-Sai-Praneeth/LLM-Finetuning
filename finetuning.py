@@ -1,12 +1,11 @@
 """
-Distributed Fine-tuning Script for Vision-Language Models
+FSDP-based Fine-tuning Script for Vision-Language Models
 """
 
 import os
-import gc
 import torch
 import torch.distributed as dist
-import torch.multiprocessing as mp
+from torch.multiprocessing import spawn
 from dotenv import load_dotenv
 from datasets import load_dataset
 from transformers import (
@@ -21,8 +20,8 @@ from data_preprocessing import CustomDataset
 from inference import get_merged_model
 
 
-class DistributedTrainer:
-    """Handles distributed training setup and execution"""
+class FSDPTrainer:
+    """Handles FSDP-based distributed training setup and execution"""
     
     def __init__(self):
         load_dotenv()
@@ -40,12 +39,15 @@ class DistributedTrainer:
         self.output_dir = os.getenv("OUTPUT_DIR", "gemma-medical")
         self.merged_model_dir = os.getenv("MERGED_MODEL_DIR", f"{self.output_dir}-merged")
         self.dataset_size = int(os.getenv("DATASET_SIZE", 1000))
+        self.chat_model_id = os.getenv("CHAT_MODEL_ID")
         
         # Validate required configs
         if not self.base_model_id:
             raise ValueError("BASE_MODEL_ID must be set in environment variables")
         if not self.dataset_id:
             raise ValueError("DATASET_ID must be set in environment variables")
+        if not self.chat_model_id:
+            raise ValueError("CHAT_MODEL_ID must be set in environment variables")
     
     def _get_quantization_config(self):
         """Get quantization configuration for 4-bit training"""
@@ -60,7 +62,7 @@ class DistributedTrainer:
     def _get_peft_config(self):
         """Get PEFT (LoRA) configuration - optimized for memory efficiency"""
         return LoraConfig(
-            lora_alpha=16,
+            lora_alpha=32,
             lora_dropout=0.1,
             r=16,  
             bias="none",
@@ -75,8 +77,8 @@ class DistributedTrainer:
             ]
         )
     
-    def setup_ddp(self, rank, world_size):
-        """Initialize distributed training"""
+    def setup_fsdp(self, rank, world_size):
+        """Initialize FSDP distributed training"""
         os.environ['MASTER_ADDR'] = 'localhost'
         os.environ['MASTER_PORT'] = '12355'
         os.environ['RANK'] = str(rank)
@@ -86,39 +88,31 @@ class DistributedTrainer:
         dist.init_process_group("nccl", rank=rank, world_size=world_size)
         torch.cuda.set_device(rank)
     
-    def cleanup_ddp(self):
-        """Clean up distributed training"""
+    def cleanup_fsdp(self):
+        """Clean up FSDP distributed training"""
         if dist.is_initialized():
             dist.destroy_process_group()
 
-    def clear_memory(self):
-        """Clear GPU memory and force garbage collection"""
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        gc.collect()
-
     def load_model_and_processor(self, rank, world_size):
-        """Load and configure model and processor"""
+        """Load and configure model and processor for FSDP"""
         quantization_config = self._get_quantization_config()
-        device_map = {"": f"cuda:{rank}"} if world_size > 1 else "auto"
+        
+        # For FSDP, we don't use device_map as FSDP handles device placement
+        device_map = None if world_size > 1 else "auto"
 
-        # Load model with memory optimizations
+        # Load model - FSDP will handle sharding
         model = AutoModelForImageTextToText.from_pretrained(
             self.base_model_id,
             quantization_config=quantization_config,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map=device_map,
             trust_remote_code=True,
-            low_cpu_mem_usage=True,  
-            max_memory={rank: "15GB"} if world_size > 1 else None,  # Reserve memory per GPU
+            low_cpu_mem_usage=True,
         )
-
-        # Clear memory after loading
-        self.clear_memory()
 
         # Load processor
         processor = AutoProcessor.from_pretrained(
-            self.base_model_id,
+            self.chat_model_id,
             trust_remote_code=True
         )
 
@@ -142,17 +136,21 @@ class DistributedTrainer:
             texts.append(text.strip())
             images.append(example['messages'][1]['content'][1]['image'])
 
-        batch = self.processor(text=texts, images=images, return_tensors="pt", padding=True)
-        batch['labels'] = batch["input_ids"].clone()
+        batch = self.processor(text=texts, images=images, return_tensors="pt", padding=True, max_length=512, truncation=True)
+        labels = batch["input_ids"].clone()
+        labels[labels == self.processor.tokenizer.pad_token_id] = -100
+        labels[batch['attention_mask'] == 0] = -100
+        batch['labels'] = labels
+        
 
         return batch
     
     def get_training_args(self, rank, world_size):
-        """Get training arguments configuration"""
+        """Get training arguments configuration for FSDP"""
         is_main_process = rank == 0
 
         effective_batch_size = min(self.batch_size, 1) 
-        gradient_accumulation_steps = 2
+        gradient_accumulation_steps = 3
 
         return SFTConfig(
             output_dir=self.output_dir,
@@ -169,26 +167,29 @@ class DistributedTrainer:
             dataset_text_field='',
             dataset_kwargs={"skip_prepare_dataset": True},
             remove_unused_columns=False,
-            # DDP specific configurations
-            ddp_find_unused_parameters=False,
-            dataloader_pin_memory=False,
+            # FSDP specific configurations
+            fsdp="full_shard auto_wrap",
+            fsdp_config={
+                "min_num_params": 0,
+                "xla": False,
+                "xla_fsdp_grad_ckpt": False,
+            },
             local_rank=rank,
             report_to=[] if not is_main_process else None,
-            # Save only on main process
             save_only_model=True,
         )
     
     def train_worker(self, rank, world_size):
-        """Main training worker function"""
+        """Main FSDP training worker function"""
         try:
-            # Setup distributed training
+            # Setup FSDP distributed training
             if world_size > 1:
-                self.setup_ddp(rank, world_size)
+                self.setup_fsdp(rank, world_size)
             
             is_main_process = rank == 0
             
             if is_main_process:
-                print(f"Starting training on {world_size} GPU(s)")
+                print(f"Starting FSDP training on {world_size} GPU(s)")
                 print(f"Model: {self.base_model_id}")
                 print(f"Dataset: {self.dataset_id}")
             
@@ -198,16 +199,10 @@ class DistributedTrainer:
             self.processor = processor
             training_args = self.get_training_args(rank, world_size)
 
-            # Clear memory before loading dataset
-            self.clear_memory()
-
             # Load dataset
             dataset = CustomDataset(load_dataset(self.dataset_id, split="train"))
-        
-            # Clear memory before creating trainer
-            self.clear_memory()
 
-            # Initialize trainer
+            # Initialize trainer - FSDP wrapping happens automatically
             trainer = SFTTrainer(
                 model=model,
                 args=training_args,
@@ -220,16 +215,10 @@ class DistributedTrainer:
             # Start training
             trainer.train()
 
-            # Clear memory after training
-            self.clear_memory()
-
             # Save model and merge (only on main process)
             if is_main_process:
                 print("Training completed. Saving model...")
                 trainer.save_model()
-
-                # Clear memory before merging
-                self.clear_memory()
 
                 print("Merging model...")
                 merged_model = get_merged_model(
@@ -250,10 +239,10 @@ class DistributedTrainer:
         finally:
             # Cleanup
             if world_size > 1:
-                self.cleanup_ddp()
+                self.cleanup_fsdp()
     
     def run(self):
-        """Run training with appropriate configuration"""
+        """Run FSDP training with appropriate configuration"""
         world_size = torch.cuda.device_count()
         
         if world_size == 0:
@@ -262,8 +251,8 @@ class DistributedTrainer:
         print(f"Available GPUs: {world_size}")
         
         if world_size > 1:
-            print("Starting distributed training...")
-            mp.spawn(
+            print("Starting FSDP distributed training...")
+            spawn(
                 self.train_worker, 
                 args=(world_size,), 
                 nprocs=world_size, 
@@ -277,9 +266,9 @@ class DistributedTrainer:
 def main():
     """Main entry point"""
     try:
-        trainer = DistributedTrainer()
+        trainer = FSDPTrainer()
         trainer.run()
-        print("Training completed successfully!")
+        print("FSDP training completed successfully!")
     except Exception as e:
         print(f"Training failed: {str(e)}")
         raise
