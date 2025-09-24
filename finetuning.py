@@ -65,6 +65,7 @@ class DistributedTrainer:
                 "lm_head",
                 "embed_tokens",
             ],
+            target_modules=['all-linear', 'q_proj', 'v_proj', 'k_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj'],
         )
     
     def setup_ddp(self, rank, world_size):
