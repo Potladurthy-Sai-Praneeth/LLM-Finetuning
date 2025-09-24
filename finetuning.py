@@ -38,6 +38,7 @@ class DistributedTrainer:
         self.dataset_id = os.getenv("DATASET_ID")
         self.output_dir = os.getenv("OUTPUT_DIR", "gemma-medical")
         self.merged_model_dir = os.getenv("MERGED_MODEL_DIR", f"{self.output_dir}-merged")
+        self.dataset_size = int(os.getenv("DATASET_SIZE", 1000))
         
         # Validate required configs
         if not self.base_model_id:
@@ -179,6 +180,7 @@ class DistributedTrainer:
             
             # Load dataset
             dataset = load_dataset(self.dataset_id, split="train")
+            dataset = dataset.select(range(self.dataset_size)) 
             dataset = process_dataset(dataset)
             
             # Initialize trainer

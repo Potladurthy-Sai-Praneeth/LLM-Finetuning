@@ -55,21 +55,7 @@ def process_dataset(dataset):
     return processed_data
 
 
-def collate_fn(batch,processor):
-    texts = []
-    images = []
-    for example in batch:
-        text = processor.apply_chat_template(
-            example["messages"], add_generation_prompt=False, tokenize=False
-        )
-        texts.append(text.strip())
-        images.append(example['messages'][1]['content'][1]['image'])
 
-    batch = processor(text=texts, images=images, return_tensors="pt", padding=True)
-
-    batch['labels'] = batch["input_ids"].clone()
-    
-    return batch
 
 
 # if __name__ == "__main__":
