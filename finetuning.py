@@ -3,15 +3,16 @@ Distributed Fine-tuning Script for Vision-Language Models
 """
 
 import os
+import gc
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from dotenv import load_dotenv
 from datasets import load_dataset
 from transformers import (
-    BitsAndBytesConfig, 
-    AutoProcessor, 
-    AutoModelForImageTextToText, 
+    BitsAndBytesConfig,
+    AutoProcessor,
+    AutoModelForImageTextToText,
 )
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from trl import SFTTrainer, SFTConfig
@@ -57,18 +58,21 @@ class DistributedTrainer:
         )
     
     def _get_peft_config(self):
-        """Get PEFT (LoRA) configuration"""
+        """Get PEFT (LoRA) configuration - optimized for memory efficiency"""
         return LoraConfig(
-            lora_alpha=32, 
-            lora_dropout=0.1, 
-            r=32, 
+            lora_alpha=16,
+            lora_dropout=0.1,
+            r=16,  
             bias="none",
             task_type="CAUSAL_LM",
             modules_to_save=[
                 "lm_head",
                 "embed_tokens",
             ],
-            target_modules='all-linear'
+            target_modules=[
+                "q_proj", "k_proj", "v_proj", "o_proj",  
+                "gate_proj", "up_proj", "down_proj",    
+            ]
         )
     
     def setup_ddp(self, rank, world_size):
@@ -86,8 +90,49 @@ class DistributedTrainer:
         """Clean up distributed training"""
         if dist.is_initialized():
             dist.destroy_process_group()
+
+    def clear_memory(self):
+        """Clear GPU memory and force garbage collection"""
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
+
+    def load_model_and_processor(self, rank, world_size):
+        """Load and configure model and processor"""
+        quantization_config = self._get_quantization_config()
+        device_map = {"": f"cuda:{rank}"} if world_size > 1 else "auto"
+
+        # Load model with memory optimizations
+        model = AutoModelForImageTextToText.from_pretrained(
+            self.base_model_id,
+            quantization_config=quantization_config,
+            torch_dtype=torch.bfloat16,
+            device_map=device_map,
+            trust_remote_code=True,
+            low_cpu_mem_usage=True,  
+            max_memory={rank: "15GB"} if world_size > 1 else None,  # Reserve memory per GPU
+        )
+
+        # Clear memory after loading
+        self.clear_memory()
+
+        # Load processor
+        processor = AutoProcessor.from_pretrained(
+            self.base_model_id,
+            trust_remote_code=True
+        )
+
+        # Apply PEFT
+        peft_config = self._get_peft_config()
+        model = prepare_model_for_kbit_training(model)
+        model = get_peft_model(model, peft_config)
+
+        return model, processor, peft_config
     
-    def collate_fn(self,batch):
+    def collate_fn(self, batch):
+        if self.processor is None:
+            raise ValueError("Processor not initialized")
+
         texts = []
         images = []
         for example in batch:
@@ -98,47 +143,22 @@ class DistributedTrainer:
             images.append(example['messages'][1]['content'][1]['image'])
 
         batch = self.processor(text=texts, images=images, return_tensors="pt", padding=True)
-
         batch['labels'] = batch["input_ids"].clone()
-        
+
         return batch
-    
-    def load_model_and_processor(self, rank, world_size):
-        """Load and configure model and processor"""
-        quantization_config = self._get_quantization_config()
-        device_map = {"": rank} if world_size > 1 else "auto"
-        
-        # Load model
-        model = AutoModelForImageTextToText.from_pretrained(
-            self.base_model_id,
-            quantization_config=quantization_config,
-            torch_dtype=torch.bfloat16,
-            device_map=device_map,
-            trust_remote_code=True,
-        )
-        
-        # Load processor
-        processor = AutoProcessor.from_pretrained(
-            self.base_model_id,
-            trust_remote_code=True
-        )
-        
-        # Apply PEFT
-        peft_config = self._get_peft_config()
-        model = prepare_model_for_kbit_training(model)
-        model = get_peft_model(model, peft_config)
-        
-        return model, processor, peft_config
     
     def get_training_args(self, rank, world_size):
         """Get training arguments configuration"""
         is_main_process = rank == 0
-        
+
+        effective_batch_size = min(self.batch_size, 1) 
+        gradient_accumulation_steps = 2
+
         return SFTConfig(
             output_dir=self.output_dir,
             num_train_epochs=self.num_epochs,
-            per_device_train_batch_size=self.batch_size,
-            gradient_accumulation_steps=5,
+            per_device_train_batch_size=effective_batch_size,
+            gradient_accumulation_steps=gradient_accumulation_steps,
             gradient_checkpointing=True,
             optim="adamw_torch_fused",
             logging_steps=10 if is_main_process else 1000,
@@ -177,12 +197,16 @@ class DistributedTrainer:
             self.model = model
             self.processor = processor
             training_args = self.get_training_args(rank, world_size)
-            
+
+            # Clear memory before loading dataset
+            self.clear_memory()
+
             # Load dataset
             dataset = CustomDataset(load_dataset(self.dataset_id, split="train"))
-            # dataset = dataset.select(range(self.dataset_size)) 
-            # dataset = process_dataset(dataset)
-            
+        
+            # Clear memory before creating trainer
+            self.clear_memory()
+
             # Initialize trainer
             trainer = SFTTrainer(
                 model=model,
@@ -195,16 +219,22 @@ class DistributedTrainer:
             
             # Start training
             trainer.train()
-            
+
+            # Clear memory after training
+            self.clear_memory()
+
             # Save model and merge (only on main process)
             if is_main_process:
                 print("Training completed. Saving model...")
                 trainer.save_model()
-                
+
+                # Clear memory before merging
+                self.clear_memory()
+
                 print("Merging model...")
                 merged_model = get_merged_model(
-                    self.base_model_id, 
-                    self.output_dir, 
+                    self.base_model_id,
+                    self.output_dir,
                     self.merged_model_dir
                 )
                 print(f"Model saved to: {self.output_dir}")
