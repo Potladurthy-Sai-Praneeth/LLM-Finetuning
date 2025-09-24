@@ -1,12 +1,6 @@
-from datasets import load_dataset
 from dotenv import load_dotenv
 import os
-from PIL import Image
-from tqdm import tqdm
-import multiprocessing as mp
 
-load_dotenv()
-BATCH_SIZE = int(os.getenv("BATCH_SIZE", 32)) 
 
 # System message for the assistant
 system_message = "You are an expert in Medical Diagnosis and treatment. You are given a image. You need to provide a description of the disease or anamoly or sometimes suggest possible treatments analysing the image."
@@ -59,6 +53,24 @@ def process_dataset(dataset):
             processed_data.append(formatted_sample)
     
     return processed_data
+
+
+def collate_fn(batch,processor):
+    texts = []
+    images = []
+    for example in batch:
+        text = processor.apply_chat_template(
+            example["messages"], add_generation_prompt=False, tokenize=False
+        )
+        texts.append(text.strip())
+        images.append(example['messages'][1]['content'][1]['image'])
+
+    batch = processor(text=texts, images=images, return_tensors="pt", padding=True)
+
+    batch['labels'] = batch["input_ids"].clone()
+    
+    return batch
+
 
 # if __name__ == "__main__":
 #     load_dotenv()
