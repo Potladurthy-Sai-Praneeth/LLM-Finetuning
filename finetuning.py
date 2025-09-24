@@ -16,7 +16,7 @@ from transformers import (
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from trl import SFTTrainer, SFTConfig
 
-from data_preprocessing import collate_fn,process_dataset
+from data_preprocessing import process_dataset
 from inference import get_merged_model
 
 
