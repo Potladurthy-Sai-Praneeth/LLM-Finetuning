@@ -25,6 +25,8 @@ class DistributedTrainer:
     
     def __init__(self):
         load_dotenv()
+        self.processor = None
+        self.model = None
         self._load_config()
     
     def _load_config(self):
@@ -58,14 +60,14 @@ class DistributedTrainer:
         return LoraConfig(
             lora_alpha=32, 
             lora_dropout=0.1, 
-            r=64, 
+            r=32, 
             bias="none",
             task_type="CAUSAL_LM",
             modules_to_save=[
                 "lm_head",
                 "embed_tokens",
             ],
-            target_modules=['all-linear', 'q_proj', 'v_proj', 'k_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj'],
+            target_modules='all-linear'
         )
     
     def setup_ddp(self, rank, world_size):
@@ -83,6 +85,22 @@ class DistributedTrainer:
         """Clean up distributed training"""
         if dist.is_initialized():
             dist.destroy_process_group()
+    
+    def collate_fn(self,batch):
+        texts = []
+        images = []
+        for example in batch:
+            text = self.processor.apply_chat_template(
+                example["messages"], add_generation_prompt=False, tokenize=False
+            )
+            texts.append(text.strip())
+            images.append(example['messages'][1]['content'][1]['image'])
+
+        batch = self.processor(text=texts, images=images, return_tensors="pt", padding=True)
+
+        batch['labels'] = batch["input_ids"].clone()
+        
+        return batch
     
     def load_model_and_processor(self, rank, world_size):
         """Load and configure model and processor"""
@@ -155,6 +173,8 @@ class DistributedTrainer:
             
             # Load model, processor, and configuration
             model, processor, peft_config = self.load_model_and_processor(rank, world_size)
+            self.model = model
+            self.processor = processor
             training_args = self.get_training_args(rank, world_size)
             
             # Load dataset
@@ -168,7 +188,7 @@ class DistributedTrainer:
                 train_dataset=dataset,
                 peft_config=peft_config,
                 processing_class=processor,
-                data_collator=collate_fn,
+                data_collator=self.collate_fn,
             )
             
             # Start training
