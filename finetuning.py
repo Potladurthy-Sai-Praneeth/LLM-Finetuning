@@ -1,11 +1,11 @@
 """
-FSDP-based Fine-tuning Script for Vision-Language Models
+Fine-tuning Script for Vision-Language Models
 """
 
 import os
+from collections import Counter
 import torch
-import torch.distributed as dist
-from torch.multiprocessing import spawn
+import torch.nn as nn
 from dotenv import load_dotenv
 from datasets import load_dataset
 from transformers import (
@@ -20,8 +20,8 @@ from data_preprocessing import CustomDataset
 from inference import get_merged_model
 
 
-class FSDPTrainer:
-    """Handles FSDP-based distributed training setup and execution"""
+class Trainer:
+    """Handles single GPU training setup and execution"""
     
     def __init__(self):
         load_dotenv()
@@ -77,39 +77,21 @@ class FSDPTrainer:
             ]
         )
     
-    def setup_fsdp(self, rank, world_size):
-        """Initialize FSDP distributed training"""
-        os.environ['MASTER_ADDR'] = 'localhost'
-        os.environ['MASTER_PORT'] = '12355'
-        os.environ['RANK'] = str(rank)
-        os.environ['WORLD_SIZE'] = str(world_size)
-        os.environ['LOCAL_RANK'] = str(rank)
-        
-        dist.init_process_group("nccl", rank=rank, world_size=world_size)
-        torch.cuda.set_device(rank)
-    
-    def cleanup_fsdp(self):
-        """Clean up FSDP distributed training"""
-        if dist.is_initialized():
-            dist.destroy_process_group()
-
-    def load_model_and_processor(self, rank, world_size):
-        """Load and configure model and processor for FSDP"""
+    def load_model_and_processor(self):
+        """Load and configure model and processor for single GPU training"""
         quantization_config = self._get_quantization_config()
-        
-        # For FSDP, we don't use device_map as FSDP handles device placement
-        device_map = None if world_size > 1 else "auto"
 
-        # Load model - FSDP will handle sharding
+        # Load model
         model = AutoModelForImageTextToText.from_pretrained(
             self.base_model_id,
             quantization_config=quantization_config,
             dtype=torch.bfloat16,
-            device_map=device_map,
+            device_map="auto",
             trust_remote_code=True,
             low_cpu_mem_usage=True,
         )
 
+        model.config.use_cache = False
         # Load processor
         processor = AutoProcessor.from_pretrained(
             self.chat_model_id,
@@ -145,12 +127,10 @@ class FSDPTrainer:
 
         return batch
     
-    def get_training_args(self, rank, world_size):
-        """Get training arguments configuration for FSDP"""
-        is_main_process = rank == 0
-
+    def get_training_args(self):
+        """Get training arguments configuration for single GPU training"""
         effective_batch_size = min(self.batch_size, 1) 
-        gradient_accumulation_steps = 3
+        gradient_accumulation_steps = 1
 
         return SFTConfig(
             output_dir=self.output_dir,
@@ -159,7 +139,7 @@ class FSDPTrainer:
             gradient_accumulation_steps=gradient_accumulation_steps,
             gradient_checkpointing=True,
             optim="adamw_torch_fused",
-            logging_steps=10 if is_main_process else 1000,
+            logging_steps=10,
             save_strategy="epoch",
             learning_rate=self.learning_rate,
             bf16=True,
@@ -167,42 +147,26 @@ class FSDPTrainer:
             dataset_text_field='',
             dataset_kwargs={"skip_prepare_dataset": True},
             remove_unused_columns=False,
-            # FSDP specific configurations
-            fsdp="full_shard auto_wrap",
-            fsdp_config={
-                "min_num_params": 0,
-                "xla": False,
-                "xla_fsdp_grad_ckpt": False,
-            },
-            local_rank=rank,
-            report_to=[] if not is_main_process else None,
             save_only_model=True,
         )
     
-    def train_worker(self, rank, world_size):
-        """Main FSDP training worker function"""
+    def train(self):
+        """Main training function for single GPU"""
         try:
-            # Setup FSDP distributed training
-            if world_size > 1:
-                self.setup_fsdp(rank, world_size)
-            
-            is_main_process = rank == 0
-            
-            if is_main_process:
-                print(f"Starting FSDP training on {world_size} GPU(s)")
-                print(f"Model: {self.base_model_id}")
-                print(f"Dataset: {self.dataset_id}")
+            print("Starting single GPU training")
+            print(f"Model: {self.base_model_id}")
+            print(f"Dataset: {self.dataset_id}")
             
             # Load model, processor, and configuration
-            model, processor, peft_config = self.load_model_and_processor(rank, world_size)
+            model, processor, peft_config = self.load_model_and_processor()
             self.model = model
             self.processor = processor
-            training_args = self.get_training_args(rank, world_size)
+            training_args = self.get_training_args()
 
             # Load dataset
             dataset = CustomDataset(load_dataset(self.dataset_id, split="train"))
 
-            # Initialize trainer - FSDP wrapping happens automatically
+            # Initialize trainer
             trainer = SFTTrainer(
                 model=model,
                 args=training_args,
@@ -215,60 +179,38 @@ class FSDPTrainer:
             # Start training
             trainer.train()
 
-            # Save model and merge (only on main process)
-            if is_main_process:
-                print("Training completed. Saving model...")
-                trainer.save_model()
+            # Save model and merge
+            print("Training completed. Saving model...")
+            trainer.save_model()
 
-                print("Merging model...")
-                merged_model = get_merged_model(
-                    self.base_model_id,
-                    self.output_dir,
-                    self.merged_model_dir
-                )
-                print(f"Model saved to: {self.output_dir}")
-                print(f"Merged model saved to: {self.merged_model_dir}")
-            
-            # Synchronize all processes
-            if world_size > 1:
-                dist.barrier()
+            print("Merging model...")
+            merged_model = get_merged_model(
+                self.base_model_id,
+                self.output_dir,
+                self.merged_model_dir
+            )
+            print(f"Model saved to: {self.output_dir}")
+            print(f"Merged model saved to: {self.merged_model_dir}")
                 
         except Exception as e:
-            print(f"Error in training worker {rank}: {str(e)}")
+            print(f"Error in training: {str(e)}")
             raise
-        finally:
-            # Cleanup
-            if world_size > 1:
-                self.cleanup_fsdp()
     
     def run(self):
-        """Run FSDP training with appropriate configuration"""
-        world_size = torch.cuda.device_count()
-        
-        if world_size == 0:
+        """Run training on single GPU"""
+        if not torch.cuda.is_available():
             raise RuntimeError("No CUDA devices available")
         
-        print(f"Available GPUs: {world_size}")
-        
-        if world_size > 1:
-            print("Starting FSDP distributed training...")
-            spawn(
-                self.train_worker, 
-                args=(world_size,), 
-                nprocs=world_size, 
-                join=True
-            )
-        else:
-            print("Starting single GPU training...")
-            self.train_worker(0, 1)
+        print("Starting single GPU training...")
+        self.train()
 
 
 def main():
     """Main entry point"""
     try:
-        trainer = FSDPTrainer()
+        trainer = Trainer()
         trainer.run()
-        print("FSDP training completed successfully!")
+        print("Training completed successfully!")
     except Exception as e:
         print(f"Training failed: {str(e)}")
         raise
