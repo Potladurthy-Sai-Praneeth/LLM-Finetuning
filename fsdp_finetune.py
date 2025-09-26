@@ -312,12 +312,45 @@ class Trainer:
 
         texts = []
         images = []
+        skipped_samples = 0
+
         for example in batch:
-            text = self.processor.apply_chat_template(
+            chat_text = self.processor.apply_chat_template(
                 example["messages"], add_generation_prompt=False, tokenize=False
             )
-            texts.append(text.strip())
-            images.append(example['messages'][1]['content'][1]['image'])
+
+            user_message = next(
+                (message for message in example.get("messages", []) if message.get("role") == "user"),
+                None,
+            )
+
+            image_value = None
+            if user_message:
+                for content_item in user_message.get("content", []):
+                    if content_item.get("type") == "image" and content_item.get("image") is not None:
+                        image_value = content_item["image"]
+                        break
+
+            if image_value is None and "image" in example:
+                image_value = example["image"]
+
+            if image_value is None:
+                skipped_samples += 1
+                continue
+
+            texts.append(chat_text.strip())
+            images.append(image_value)
+
+        if not texts:
+            raise ValueError("All samples in the batch were missing images; cannot create inputs.")
+
+        if len(texts) != len(images):
+            raise ValueError(
+                f"Mismatched batch construction: collected {len(texts)} texts but {len(images)} images."
+            )
+
+        if skipped_samples and self.rank == 0:
+            print(f"Warning: skipped {skipped_samples} sample(s) without images in current batch.")
 
         batch = self.processor(text=texts, images=images, return_tensors="pt", padding=True, max_length=512, truncation=True)
         labels = batch["input_ids"].clone()
