@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from data_preprocessing import CustomDataset
 from inference import get_merged_model
@@ -45,10 +46,20 @@ class Trainer:
         self.world_size = 1
         self.rank = 0
 
-        with open("config.yaml", "r") as file:
-            self.config = yaml.safe_load(file)
-        
+        self._load_config()
         self._setup_environment()
+    
+    def _load_config(self):
+        """Load configuration from YAML file"""
+        # Get the directory where this script is located
+        script_dir = Path(__file__).parent
+        config_path = script_dir / "config.yaml"
+        
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config file not found at {config_path}")
+        
+        with open(config_path, "r") as file:
+            self.config = yaml.safe_load(file)
     
     def _setup_environment(self):
         """Set up environment variables for optimal performance"""

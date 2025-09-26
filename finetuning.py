@@ -7,6 +7,7 @@ from collections import Counter
 import torch
 import torch.nn as nn
 import yaml
+from pathlib import Path
 from datasets import load_dataset
 from transformers import (
     BitsAndBytesConfig,
@@ -31,7 +32,34 @@ class Trainer:
     
     def _load_config(self):
         """Load configuration from YAML file"""
-        with open("config.yaml", "r") as file:
+        # Check for environment variable first
+        config_path = os.getenv('CONFIG_PATH')
+        
+        if config_path:
+            config_path = Path(config_path)
+        else:
+            # Get the directory where this script is located
+            script_dir = Path(__file__).parent
+            config_path = script_dir / "config.yaml"
+        
+        if not config_path.exists():
+            # Try additional common locations
+            possible_paths = [
+                Path.cwd() / "config.yaml",
+                Path("/kaggle/working/config.yaml"),
+                Path("/content/config.yaml"),
+                Path("./config.yaml")
+            ]
+            
+            for path in possible_paths:
+                if path.exists():
+                    config_path = path
+                    break
+            else:
+                raise FileNotFoundError(f"Config file not found. Tried: {config_path} and {possible_paths}")
+        
+        print(f"Loading config from: {config_path}")
+        with open(config_path, "r") as file:
             self.config = yaml.safe_load(file)
         
         # Set up environment variables
