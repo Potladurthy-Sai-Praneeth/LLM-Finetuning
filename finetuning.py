@@ -6,7 +6,7 @@ import os
 from collections import Counter
 import torch
 import torch.nn as nn
-from dotenv import load_dotenv
+import yaml
 from datasets import load_dataset
 from transformers import (
     BitsAndBytesConfig,
@@ -24,31 +24,20 @@ class Trainer:
     """Handles single GPU training setup and execution"""
     
     def __init__(self):
-        load_dotenv()
         self.processor = None
         self.model = None
+        self.config = {}
         self._load_config()
     
     def _load_config(self):
-        """Load configuration from environment variables"""
-        self.base_model_id = os.getenv("BASE_MODEL_ID")
-        self.batch_size = int(os.getenv("BATCH_SIZE", 1))
-        self.num_epochs = int(os.getenv("NUM_EPOCHS", 3))
-        self.learning_rate = float(os.getenv("LEARNING_RATE", 2e-4))
-        self.dataset_id = os.getenv("DATASET_ID")
-        self.output_dir = os.getenv("OUTPUT_DIR", "gemma-medical")
-        self.merged_model_dir = os.getenv("MERGED_MODEL_DIR", f"{self.output_dir}-merged")
-        self.dataset_size = int(os.getenv("DATASET_SIZE", 1000))
-        self.chat_model_id = os.getenv("CHAT_MODEL_ID")
+        """Load configuration from YAML file"""
+        with open("config.yaml", "r") as file:
+            self.config = yaml.safe_load(file)
         
-        # Validate required configs
-        if not self.base_model_id:
-            raise ValueError("BASE_MODEL_ID must be set in environment variables")
-        if not self.dataset_id:
-            raise ValueError("DATASET_ID must be set in environment variables")
-        if not self.chat_model_id:
-            raise ValueError("CHAT_MODEL_ID must be set in environment variables")
-    
+        # Set up environment variables
+        env_vars = self.config.get('environment', {})
+        for key, value in env_vars.items():
+            os.environ[key] = str(value)
     
     def _get_quantization_config(self):
         """Get quantization configuration for 4-bit training"""
@@ -63,19 +52,13 @@ class Trainer:
     def _get_peft_config(self):
         """Get PEFT (LoRA) configuration - optimized for memory efficiency"""
         return LoraConfig(
-            lora_alpha=32,
-            lora_dropout=0.1,
-            r=16,  
+            lora_alpha=self.config['lora']['LORA_ALPHA'],
+            lora_dropout=self.config['lora']['LORA_DROPOUT'],
+            r=self.config['lora']['LORA_R'],
             bias="none",
-            task_type="CAUSAL_LM",
-            modules_to_save=[
-                "lm_head",
-                "embed_tokens",
-            ],
-            target_modules=[
-                "q_proj", "k_proj", "v_proj", "o_proj",  
-                "gate_proj", "up_proj", "down_proj",    
-            ]
+            task_type=self.config['lora']['TASK_TYPE'],
+            modules_to_save=self.config['lora']['MODULES_TO_SAVE'],
+            target_modules=self.config['lora']['TARGET_MODULES']
         )
     
     def load_model_and_processor(self):
@@ -84,7 +67,7 @@ class Trainer:
 
         # Load model
         model = AutoModelForImageTextToText.from_pretrained(
-            self.base_model_id,
+            self.config['model']['BASE_MODEL_ID'],
             quantization_config=quantization_config,
             dtype=torch.bfloat16,
             device_map="auto",
@@ -96,7 +79,7 @@ class Trainer:
 
         # Load processor
         processor = AutoProcessor.from_pretrained(
-            self.chat_model_id,
+            self.config['model']['CHAT_MODEL_ID'],
             trust_remote_code=True
         )
 
@@ -128,30 +111,29 @@ class Trainer:
             texts.append(text.strip())
             images.append(example['messages'][1]['content'][1]['image'])
 
-        batch = self.processor(text=texts, images=images, return_tensors="pt", padding=True, max_length=512, truncation=True)
+        batch = self.processor(text=texts, images=images, return_tensors="pt", padding=True, max_length=self.config['model']['MAX_SEQ_LENGTH'], truncation=True)
         labels = batch["input_ids"].clone()
         labels[labels == self.processor.tokenizer.pad_token_id] = -100
         labels[batch['attention_mask'] == 0] = -100
         batch['labels'] = labels
         
-
         return batch
     
     def get_training_args(self):
         """Get training arguments configuration for single GPU training"""
-        effective_batch_size = min(self.batch_size, 1) 
-        gradient_accumulation_steps = 1
+        effective_batch_size = min(self.config['training']['BATCH_SIZE'], 1) 
+        gradient_accumulation_steps = self.config['training']['GRADIENT_ACCUMULATION_STEPS']
 
         return SFTConfig(
-            output_dir=self.output_dir,
-            num_train_epochs=self.num_epochs,
+            output_dir=self.config['training']['OUTPUT_DIR'],
+            num_train_epochs=self.config['training']['NUM_TRAIN_EPOCHS'],
             per_device_train_batch_size=effective_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
             gradient_checkpointing=True,
             optim="adamw_torch_fused",
-            logging_steps=10,
+            logging_steps=self.config['training']['LOGGING_STEPS'],
             save_strategy="epoch",
-            learning_rate=self.learning_rate,
+            learning_rate=self.config['training']['LEARNING_RATE'],
             bf16=True,
             lr_scheduler_type="cosine",
             dataset_text_field='',
@@ -164,8 +146,8 @@ class Trainer:
         """Main training function for single GPU"""
         try:
             print("Starting single GPU training")
-            print(f"Model: {self.base_model_id}")
-            print(f"Dataset: {self.dataset_id}")
+            print(f"Model: {self.config['model']['BASE_MODEL_ID']}")
+            print(f"Dataset: {self.config['dataset']['DATASET_ID']}")
             
             # Load model, processor, and configuration
             model, processor, peft_config = self.load_model_and_processor()
@@ -174,7 +156,7 @@ class Trainer:
             training_args = self.get_training_args()
 
             # Load dataset
-            dataset = CustomDataset(load_dataset(self.dataset_id, split="train"))
+            dataset = CustomDataset(load_dataset(self.config['dataset']['DATASET_ID'], split="train"))
 
             # Initialize trainer
             trainer = SFTTrainer(
@@ -195,12 +177,12 @@ class Trainer:
 
             print("Merging model...")
             merged_model = get_merged_model(
-                self.base_model_id,
-                self.output_dir,
-                self.merged_model_dir
+                self.config['model']['BASE_MODEL_ID'],
+                self.config['training']['OUTPUT_DIR'],
+                self.config['training']['MERGED_MODEL_DIR']
             )
-            print(f"Model saved to: {self.output_dir}")
-            print(f"Merged model saved to: {self.merged_model_dir}")
+            print(f"Model saved to: {self.config['training']['OUTPUT_DIR']}")
+            print(f"Merged model saved to: {self.config['training']['MERGED_MODEL_DIR']}")
                 
         except Exception as e:
             print(f"Error in training: {str(e)}")
