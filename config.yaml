@@ -1,0 +1,35 @@
+environment:
+  HF_HUB_ENABLE_HF_TRANSFER : "1"
+  CUDA_VISIBLE_DEVICES : "0,1"  
+
+model:
+  BASE_MODEL_ID : "google/gemma-3-4b-pt"
+  CHAT_MODEL_ID : "google/gemma-3-4b-it"
+  MAX_SEQ_LENGTH : 512
+
+dataset:
+  DATASET_ID : "mmoukouba/MedPix-Grouped-QA"
+
+training:
+  OUTPUT_DIR : "gemma-medical"
+  BATCH_SIZE : 4
+  GRADIENT_ACCUMULATION_STEPS : 1
+  LEARNING_RATE : 2e-4
+  WEIGHT_DECAY : 0.0
+  NUM_TRAIN_EPOCHS : 3
+  LR_WARMUP_STEPS : 100
+  MAX_GRAD_NORM : 0.3
+  SAVE_TOTAL_LIMIT : 3
+  SAVE_STEPS : 500
+  EVAL_STEPS : 500
+  LOGGING_STEPS : 10
+  SEED : 42
+  MERGED_MODEL_DIR : "gemma-medical-merged"
+
+lora:
+  LORA_R : 8
+  LORA_ALPHA : 16
+  LORA_DROPOUT : 0.05
+  TASK_TYPE : "CAUSAL_LM"
+  MODULES_TO_SAVE : ["lm_head", "embed_tokens"]
+  TARGET_MODULES : ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]

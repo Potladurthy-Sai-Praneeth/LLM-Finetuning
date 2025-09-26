@@ -49,6 +49,7 @@ class Trainer:
         if not self.chat_model_id:
             raise ValueError("CHAT_MODEL_ID must be set in environment variables")
     
+    
     def _get_quantization_config(self):
         """Get quantization configuration for 4-bit training"""
         return BitsAndBytesConfig(
@@ -92,6 +93,7 @@ class Trainer:
         )
 
         model.config.use_cache = False
+
         # Load processor
         processor = AutoProcessor.from_pretrained(
             self.chat_model_id,
@@ -102,6 +104,14 @@ class Trainer:
         peft_config = self._get_peft_config()
         model = prepare_model_for_kbit_training(model)
         model = get_peft_model(model, peft_config)
+
+        # Freeze all parameters except LoRA layers
+        with torch.no_grad():
+            for name, param in model.named_parameters():
+                if ".lora_A." in name or ".lora_B." in name:
+                    param.requires_grad_(True)
+                else:
+                    param.requires_grad_(False)
 
         return model, processor, peft_config
     
