@@ -201,26 +201,26 @@ class Trainer:
         print("Applying PEFT configuration...")
         # Apply PEFT
         model = prepare_model_for_kbit_training(model)
-        model = get_peft_model(model, self._get_peft_config())
-        print("PEFT applied successfully")
+        # model = get_peft_model(model, self._get_peft_config())
+        # print("PEFT applied successfully")
 
-        # Freeze all parameters except LoRA layers
-        trainable_params = 0
-        total_params = 0
-        print("Configuring trainable parameters...")
-        with torch.no_grad():
-            for name, param in model.named_parameters():
-                total_params += param.numel()
-                if ".lora_A." in name or ".lora_B." in name:
-                    param.requires_grad_(True)
-                    trainable_params += param.numel()
-                else:
-                    param.requires_grad_(False)
+        # # Freeze all parameters except LoRA layers
+        # trainable_params = 0
+        # total_params = 0
+        # print("Configuring trainable parameters...")
+        # with torch.no_grad():
+        #     for name, param in model.named_parameters():
+        #         total_params += param.numel()
+        #         if ".lora_A." in name or ".lora_B." in name:
+        #             param.requires_grad_(True)
+        #             trainable_params += param.numel()
+        #         else:
+        #             param.requires_grad_(False)
         
-        print(f"Trainable parameters: {trainable_params:,} / {total_params:,} ({100 * trainable_params / total_params:.2f}%)")
+        # print(f"Trainable parameters: {trainable_params:,} / {total_params:,} ({100 * trainable_params / total_params:.2f}%)")
 
-        model.gradient_checkpointing_enable()
-        model.enable_input_require_grads()
+        # model.gradient_checkpointing_enable()
+        # model.enable_input_require_grads()
         print("Model configuration completed")
 
         self.model = model
@@ -237,7 +237,7 @@ class Trainer:
         )
 
         self.mixed_precision_policy = MixedPrecision(
-            param_dtype=torch.bfloat16,
+            param_dtype=torch.float32,
             reduce_dtype=torch.bfloat16,
             buffer_dtype=torch.bfloat16,
             cast_forward_inputs=True,
