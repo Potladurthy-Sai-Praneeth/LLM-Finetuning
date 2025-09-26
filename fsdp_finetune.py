@@ -76,6 +76,17 @@ class Trainer:
         # Auto-detect world size from available GPUs
         available_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 1
         
+        print(f"Detected {available_gpus} available GPU(s)")
+        
+        # For single GPU or CPU, disable FSDP to avoid distributed setup issues
+        if available_gpus <= 1 and self.use_fsdp:
+            print("Single GPU/CPU detected. Disabling FSDP for simpler training.")
+            self.use_fsdp = False
+            self.local_rank = 0
+            self.world_size = 1
+            self.rank = 0
+            return self.local_rank, self.world_size, self.rank
+        
         if "RANK" not in os.environ:
             os.environ["RANK"] = "0"
         if "LOCAL_RANK" not in os.environ:
@@ -91,26 +102,25 @@ class Trainer:
         self.world_size = int(os.environ.get("WORLD_SIZE", available_gpus))
         self.rank = int(os.environ.get("RANK", 0))
 
-        print(f"Detected {available_gpus} available GPU(s)")
         print(f"Using world_size: {self.world_size}, rank: {self.rank}, local_rank: {self.local_rank}")
 
-        # Only initialize if using FSDP or multi-GPU
+        # Only initialize if using FSDP
         if self.use_fsdp and not dist.is_initialized():
-            # Only initialize distributed if we have multiple GPUs or explicitly want FSDP
-            if self.world_size > 1:
+            print("Initializing distributed process group...")
+            try:
                 dist.init_process_group(
                     backend="nccl" if torch.cuda.is_available() else "gloo",
                     rank=self.rank,
                     world_size=self.world_size
                 )
-                print(f"Initialized distributed training with {self.world_size} GPUs")
-            else:
-                print("Single GPU detected, but FSDP enabled. Initializing process group for FSDP...")
-                dist.init_process_group(
-                    backend="nccl" if torch.cuda.is_available() else "gloo",
-                    rank=0,
-                    world_size=1
-                )
+                print(f"Successfully initialized distributed training with {self.world_size} GPU(s)")
+            except Exception as e:
+                print(f"Failed to initialize distributed training: {e}")
+                print("Falling back to single GPU training without FSDP...")
+                self.use_fsdp = False
+                self.local_rank = 0
+                self.world_size = 1
+                self.rank = 0
         
         return self.local_rank, self.world_size, self.rank
 
@@ -138,44 +148,71 @@ class Trainer:
 
     def load_model_and_processor(self, local_rank):
         """Load and configure model and processor for training"""
+        print("Loading model and processor...")
+        
+        # Determine device mapping
+        if torch.cuda.is_available() and local_rank < torch.cuda.device_count():
+            device_map = {'': local_rank}
+            print(f"Using GPU {local_rank} for model loading")
+        else:
+            device_map = 'cpu'
+            print("Using CPU for model loading")
+        
+        print(f"Loading model: {self.config['model']['BASE_MODEL_ID']}")
         # Load model
         model = AutoModelForImageTextToText.from_pretrained(
             self.config['model']['BASE_MODEL_ID'],
             quantization_config=self._get_quantization_config(),
             dtype=torch.bfloat16,
-            device_map={'': local_rank},
+            device_map=device_map,
             trust_remote_code=True,
             low_cpu_mem_usage=True,
         )
+        print("Model loaded successfully")
 
         model.config.use_cache = False
 
+        print(f"Loading processor: {self.config['model']['CHAT_MODEL_ID']}")
         # Load processor
         processor = AutoProcessor.from_pretrained(
             self.config['model']['CHAT_MODEL_ID'],
             trust_remote_code=True
         )
+        print("Processor loaded successfully")
 
+        print("Applying PEFT configuration...")
         # Apply PEFT
         model = prepare_model_for_kbit_training(model)
         model = get_peft_model(model, self._get_peft_config())
+        print("PEFT applied successfully")
 
         # Freeze all parameters except LoRA layers
+        trainable_params = 0
+        total_params = 0
+        print("Configuring trainable parameters...")
         with torch.no_grad():
             for name, param in model.named_parameters():
+                total_params += param.numel()
                 if ".lora_A." in name or ".lora_B." in name:
                     param.requires_grad_(True)
+                    trainable_params += param.numel()
                 else:
                     param.requires_grad_(False)
+        
+        print(f"Trainable parameters: {trainable_params:,} / {total_params:,} ({100 * trainable_params / total_params:.2f}%)")
 
         model.gradient_checkpointing_enable()
         model.enable_input_require_grads()
+        print("Model configuration completed")
 
         self.model = model
         self.processor = processor
     
     def _setup_fsdp_policies(self):
         """Set up FSDP policies and configurations"""
+        if self.model is None:
+            raise ValueError("Model must be loaded before setting up FSDP policies")
+            
         self.auto_wrap_policy = partial(
             transformer_auto_wrap_policy,
             transformer_layer_cls={Gemma3DecoderLayer},
@@ -199,6 +236,10 @@ class Trainer:
     
     def _apply_fsdp(self):
         """Apply FSDP wrapping to the model"""
+        if self.model is None:
+            raise ValueError("Model must be loaded before applying FSDP")
+            
+        print("Wrapping model with FSDP...")
         self.model = FSDP(
             self.model,
             auto_wrap_policy=self.auto_wrap_policy,
@@ -210,6 +251,7 @@ class Trainer:
             cpu_offload=self.cpu_offload,
             ignored_modules=self.ignore_modules, 
         )
+        print("FSDP wrapping completed")
 
         # Apply activation checkpointing AFTER FSDP wrapping
         non_reentrant_wrapper = partial(
@@ -269,59 +311,97 @@ class Trainer:
 
     def train(self): 
         try:
+            print("="*50)
             print("Starting training")
             print(f"Model: {self.config['model']['BASE_MODEL_ID']}")
             print(f"Dataset: {self.config['dataset']['DATASET_ID']}")
             print(f"Using FSDP: {self.use_fsdp}")
+            print(f"Batch size: {self.config['training']['BATCH_SIZE']}")
+            print(f"Epochs: {self.config['training']['NUM_TRAIN_EPOCHS']}")
+            print("="*50)
 
+            print("\n[STEP 1] Initializing distributed training...")
             local_rank, world_size, rank = self._init_distributed()
+            print(f"✓ Distributed setup complete: rank={rank}, world_size={world_size}, local_rank={local_rank}")
             
+            print("\n[STEP 2] Setting up compute device...")
             # Ensure we're using the correct GPU
             if torch.cuda.is_available() and local_rank < torch.cuda.device_count():
                 torch.cuda.set_device(local_rank)
                 device = torch.device(f"cuda:{local_rank}")
-                print(f"Using GPU {local_rank}: {torch.cuda.get_device_name(local_rank)}")
+                print(f"✓ Using GPU {local_rank}: {torch.cuda.get_device_name(local_rank)}")
             else:
                 device = torch.device("cpu")
-                print("Using CPU")
+                print("✓ Using CPU")
 
+            print("\n[STEP 3] Loading model and processor...")
             self.load_model_and_processor(local_rank)
+            print("✓ Model and processor loaded successfully")
             
             # Only apply FSDP if enabled
             if self.use_fsdp:
+                print("\n[STEP 4] Setting up FSDP...")
                 self._setup_fsdp_policies()
                 self._apply_fsdp()
+                print("✓ FSDP setup completed")
+            else:
+                print("\n[STEP 4] Skipping FSDP (disabled in config)")
 
-            dataset = CustomDataset(load_dataset(self.config['dataset']['DATASET_ID'], split="train"))
+            print("\n[STEP 5] Loading dataset...")
+            print(f"Dataset ID: {self.config['dataset']['DATASET_ID']}")
+            raw_dataset = load_dataset(self.config['dataset']['DATASET_ID'], split="train")
+            try:
+                dataset_size = len(raw_dataset)  # type: ignore
+                print(f"✓ Raw dataset loaded with {dataset_size} samples")
+            except:
+                print("✓ Raw dataset loaded (size unknown for streaming dataset)")
+            
+            dataset = CustomDataset(raw_dataset)
+            print(f"✓ Custom dataset created with {len(dataset)} samples")
 
+            print("\n[STEP 6] Initializing trainer...")
+            training_args = self.get_training_args()
+            print(f"Training args: output_dir={training_args.output_dir}, epochs={training_args.num_train_epochs}")
+            
             # Initialize trainer
             trainer = SFTTrainer(
                 model=self.model,
-                args=self.get_training_args(),
+                args=training_args,
                 train_dataset=dataset,
                 peft_config=self._get_peft_config(),
                 processing_class=self.processor,
                 data_collator=self.collate_fn,
             )
+            print("✓ Trainer initialized successfully")
 
+            print("\n[STEP 7] Starting training loop...")
             trainer.train()
+            print("✓ Training completed successfully")
 
             # Save model and merge (only on rank 0 for multi-GPU)
             if self.rank == 0:
-                print("Training completed. Saving model...")
+                print("\n[STEP 8] Saving and merging model...")
                 trainer.save_model()
+                print("✓ Model saved successfully")
 
-                print("Merging model...")
-                merged_model = get_merged_model(
-                    self.config['model']['BASE_MODEL_ID'],
-                    self.config['training']['OUTPUT_DIR'],
-                    self.config['training']['MERGED_MODEL_DIR']
-                )
-                print(f"Model saved to: {self.config['training']['OUTPUT_DIR']}")
-                print(f"Merged model saved to: {self.config['training']['MERGED_MODEL_DIR']}")
+                try:
+                    print("Merging model...")
+                    merged_model = get_merged_model(
+                        self.config['model']['BASE_MODEL_ID'],
+                        self.config['training']['OUTPUT_DIR'],
+                        self.config['training']['MERGED_MODEL_DIR']
+                    )
+                    print(f"✓ Model saved to: {self.config['training']['OUTPUT_DIR']}")
+                    print(f"✓ Merged model saved to: {self.config['training']['MERGED_MODEL_DIR']}")
+                except Exception as e:
+                    print(f"Warning: Model merging failed: {e}")
+                    print("Training was successful, but merged model not created")
 
         except Exception as e:
-            print(f"Error in training: {str(e)}")
+            print(f"\n✗ Error in training: {str(e)}")
+            import traceback
+            print("Full traceback:")
+            traceback.print_exc()
             raise
         finally:
             # Clean up distributed process group
