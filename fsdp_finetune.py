@@ -45,10 +45,14 @@ class Trainer:
         self.local_rank = 0
         self.world_size = 1
         self.rank = 0
+        self.use_fsdp = True  # Default value
 
         self._load_config()
         self._setup_environment()
-    
+        
+        # Override FSDP setting from config if available
+        self.use_fsdp = self.config.get('training', {}).get('USE_FSDP', True)
+
     def _load_config(self):
         """Load configuration from YAML file"""
         # Get the directory where this script is located
@@ -69,28 +73,44 @@ class Trainer:
     
     def _init_distributed(self):
         """Initialize process group for distributed training."""
+        # Auto-detect world size from available GPUs
+        available_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 1
+        
         if "RANK" not in os.environ:
             os.environ["RANK"] = "0"
         if "LOCAL_RANK" not in os.environ:
             os.environ["LOCAL_RANK"] = "0"
         if "WORLD_SIZE" not in os.environ:
-            os.environ["WORLD_SIZE"] = "1"
+            os.environ["WORLD_SIZE"] = str(available_gpus)
         if "MASTER_ADDR" not in os.environ:
             os.environ["MASTER_ADDR"] = "127.0.0.1"
         if "MASTER_PORT" not in os.environ:
             os.environ["MASTER_PORT"] = "29500"
 
         self.local_rank = int(os.environ.get("LOCAL_RANK", 0))
-        self.world_size = int(os.environ.get("WORLD_SIZE", 1))
+        self.world_size = int(os.environ.get("WORLD_SIZE", available_gpus))
         self.rank = int(os.environ.get("RANK", 0))
 
-        if not dist.is_initialized() and self.world_size > 1:
-            dist.init_process_group(
-                backend="nccl",
-                init_method=f"tcp://{os.environ['MASTER_ADDR']}:{os.environ['MASTER_PORT']}",
-                rank=self.rank,
-                world_size=self.world_size
-            )
+        print(f"Detected {available_gpus} available GPU(s)")
+        print(f"Using world_size: {self.world_size}, rank: {self.rank}, local_rank: {self.local_rank}")
+
+        # Only initialize if using FSDP or multi-GPU
+        if self.use_fsdp and not dist.is_initialized():
+            # Only initialize distributed if we have multiple GPUs or explicitly want FSDP
+            if self.world_size > 1:
+                dist.init_process_group(
+                    backend="nccl" if torch.cuda.is_available() else "gloo",
+                    rank=self.rank,
+                    world_size=self.world_size
+                )
+                print(f"Initialized distributed training with {self.world_size} GPUs")
+            else:
+                print("Single GPU detected, but FSDP enabled. Initializing process group for FSDP...")
+                dist.init_process_group(
+                    backend="nccl" if torch.cuda.is_available() else "gloo",
+                    rank=0,
+                    world_size=1
+                )
         
         return self.local_rank, self.world_size, self.rank
 
@@ -249,19 +269,27 @@ class Trainer:
 
     def train(self): 
         try:
-            print("Starting FSDP training")
+            print("Starting training")
             print(f"Model: {self.config['model']['BASE_MODEL_ID']}")
             print(f"Dataset: {self.config['dataset']['DATASET_ID']}")
+            print(f"Using FSDP: {self.use_fsdp}")
 
             local_rank, world_size, rank = self._init_distributed()
-            torch.cuda.set_device(local_rank)
-            device = torch.device(f"cuda:{local_rank}")
+            
+            # Ensure we're using the correct GPU
+            if torch.cuda.is_available() and local_rank < torch.cuda.device_count():
+                torch.cuda.set_device(local_rank)
+                device = torch.device(f"cuda:{local_rank}")
+                print(f"Using GPU {local_rank}: {torch.cuda.get_device_name(local_rank)}")
+            else:
+                device = torch.device("cpu")
+                print("Using CPU")
 
             self.load_model_and_processor(local_rank)
-            self._setup_fsdp_policies()
             
-            # Apply FSDP wrapping
-            if self.world_size > 1 or True:  # Always use FSDP for consistency
+            # Only apply FSDP if enabled
+            if self.use_fsdp:
+                self._setup_fsdp_policies()
                 self._apply_fsdp()
 
             dataset = CustomDataset(load_dataset(self.config['dataset']['DATASET_ID'], split="train"))
@@ -278,25 +306,26 @@ class Trainer:
 
             trainer.train()
 
-            # Save model and merge
-            print("Training completed. Saving model...")
-            trainer.save_model()
+            # Save model and merge (only on rank 0 for multi-GPU)
+            if self.rank == 0:
+                print("Training completed. Saving model...")
+                trainer.save_model()
 
-            print("Merging model...")
-            merged_model = get_merged_model(
-                self.config['model']['BASE_MODEL_ID'],
-                self.config['training']['OUTPUT_DIR'],
-                self.config['training']['MERGED_MODEL_DIR']
-            )
-            print(f"Model saved to: {self.config['training']['OUTPUT_DIR']}")
-            print(f"Merged model saved to: {self.config['training']['MERGED_MODEL_DIR']}")
+                print("Merging model...")
+                merged_model = get_merged_model(
+                    self.config['model']['BASE_MODEL_ID'],
+                    self.config['training']['OUTPUT_DIR'],
+                    self.config['training']['MERGED_MODEL_DIR']
+                )
+                print(f"Model saved to: {self.config['training']['OUTPUT_DIR']}")
+                print(f"Merged model saved to: {self.config['training']['MERGED_MODEL_DIR']}")
 
         except Exception as e:
             print(f"Error in training: {str(e)}")
             raise
         finally:
             # Clean up distributed process group
-            if self.world_size > 1 and dist.is_initialized():
+            if self.use_fsdp and dist.is_initialized():
                 dist.destroy_process_group()
 
     def run(self):

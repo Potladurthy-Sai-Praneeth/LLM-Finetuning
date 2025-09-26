@@ -1,6 +1,7 @@
 environment:
   HF_HUB_ENABLE_HF_TRANSFER : "1"
-  CUDA_VISIBLE_DEVICES : "0,1"  
+  # Remove CUDA_VISIBLE_DEVICES to let the script auto-detect all GPUs
+  # CUDA_VISIBLE_DEVICES : "0,1"  
 
 model:
   BASE_MODEL_ID : "google/gemma-3-4b-pt"
@@ -25,6 +26,7 @@ training:
   LOGGING_STEPS : 10
   SEED : 42
   MERGED_MODEL_DIR : "gemma-medical-merged"
+  USE_FSDP : true  # Set to false to disable FSDP for single GPU
 
 lora:
   LORA_R : 8
