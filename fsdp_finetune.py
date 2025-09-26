@@ -237,9 +237,9 @@ class Trainer:
         )
 
         self.mixed_precision_policy = MixedPrecision(
-            param_dtype=torch.float16,
-            reduce_dtype=torch.float16,
-            buffer_dtype=torch.float16,
+            param_dtype=torch.bfloat16,
+            reduce_dtype=torch.bfloat16,
+            buffer_dtype=torch.bfloat16,
             cast_forward_inputs=True,
         )
 
@@ -248,7 +248,7 @@ class Trainer:
         # Build ignored modules list for FSDP
         self.ignore_modules = []
         for module in self.model.modules():
-            params = list(module.parameters(recurse=False))
+            params = list(module.parameters(recurse=True))
             if params and all(not p.requires_grad for p in params):
                 self.ignore_modules.append(module)
     
@@ -294,6 +294,7 @@ class Trainer:
             per_device_train_batch_size=effective_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
             gradient_checkpointing=True,
+            gradient_checkpointing_kwargs = {'use_reentrant': True},
             optim="adamw_torch_fused",
             logging_steps=int(self.config['training']['LOGGING_STEPS']),
             save_strategy="epoch",
@@ -457,7 +458,7 @@ class Trainer:
                 args=training_args,
                 train_dataset=dataset,
                 peft_config=self._get_peft_config(),
-                processing_class=self.processor,
+                # processing_class=self.processor,
                 data_collator=self.collate_fn,
             )
             print("✓ Trainer initialized successfully")
