@@ -74,7 +74,7 @@ class Trainer:
     def _init_distributed(self):
         """Initialize process group for distributed training."""
         # Auto-detect world size from available GPUs
-        available_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 1
+        available_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
         
         print(f"Detected {available_gpus} available GPU(s)")
         
@@ -87,19 +87,32 @@ class Trainer:
             self.rank = 0
             return self.local_rank, self.world_size, self.rank
         
-        if "RANK" not in os.environ:
-            os.environ["RANK"] = "0"
-        if "LOCAL_RANK" not in os.environ:
-            os.environ["LOCAL_RANK"] = "0"
-        if "WORLD_SIZE" not in os.environ:
-            os.environ["WORLD_SIZE"] = str(available_gpus)
+        if self.use_fsdp:
+            has_torchrun_env = (
+                os.environ.get("LOCAL_RANK") is not None
+                and os.environ.get("RANK") is not None
+                and os.environ.get("WORLD_SIZE") is not None
+            )
+
+            if not has_torchrun_env:
+                print(
+                    "Multiple GPUs detected but distributed launch arguments were not provided. "
+                    "Please launch with `torchrun --nproc_per_node=<num_gpus>` to enable FSDP. "
+                    "Falling back to single-process training without FSDP."
+                )
+                self.use_fsdp = False
+                self.local_rank = 0
+                self.world_size = 1
+                self.rank = 0
+                return self.local_rank, self.world_size, self.rank
+
         if "MASTER_ADDR" not in os.environ:
             os.environ["MASTER_ADDR"] = "127.0.0.1"
         if "MASTER_PORT" not in os.environ:
             os.environ["MASTER_PORT"] = "29500"
 
         self.local_rank = int(os.environ.get("LOCAL_RANK", 0))
-        self.world_size = int(os.environ.get("WORLD_SIZE", available_gpus))
+        self.world_size = int(os.environ.get("WORLD_SIZE", 1))
         self.rank = int(os.environ.get("RANK", 0))
 
         print(f"Using world_size: {self.world_size}, rank: {self.rank}, local_rank: {self.local_rank}")
@@ -108,8 +121,13 @@ class Trainer:
         if self.use_fsdp and not dist.is_initialized():
             print("Initializing distributed process group...")
             try:
+                backend = "nccl"
+                nccl_available = hasattr(dist, "is_nccl_available") and dist.is_nccl_available()
+                if os.name == "nt" or not nccl_available:
+                    backend = "gloo"
+
                 dist.init_process_group(
-                    backend="nccl" if torch.cuda.is_available() else "gloo",
+                    backend=backend,
                     rank=self.rank,
                     world_size=self.world_size
                 )
@@ -267,19 +285,19 @@ class Trainer:
     
     def get_training_args(self):
         """Get training arguments configuration"""
-        effective_batch_size = self.config['training']['BATCH_SIZE'] // self.world_size
-        gradient_accumulation_steps = self.config['training']['GRADIENT_ACCUMULATION_STEPS']
+        effective_batch_size = int(self.config['training']['BATCH_SIZE']) // self.world_size
+        gradient_accumulation_steps = int(self.config['training']['GRADIENT_ACCUMULATION_STEPS'])
 
         return SFTConfig(
             output_dir=self.config['training']['OUTPUT_DIR'],
-            num_train_epochs=self.config['training']['NUM_TRAIN_EPOCHS'],
+            num_train_epochs=int(self.config['training']['NUM_TRAIN_EPOCHS']),
             per_device_train_batch_size=effective_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
             gradient_checkpointing=True,
             optim="adamw_torch_fused",
-            logging_steps=self.config['training']['LOGGING_STEPS'],
+            logging_steps=int(self.config['training']['LOGGING_STEPS']),
             save_strategy="epoch",
-            learning_rate=self.config['training']['LEARNING_RATE'],
+            learning_rate=float(self.config['training']['LEARNING_RATE']),
             bf16=True,
             lr_scheduler_type="cosine",
             dataset_text_field='',
