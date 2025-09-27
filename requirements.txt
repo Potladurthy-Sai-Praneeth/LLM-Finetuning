@@ -5,6 +5,6 @@ peft
 trl
 bitsandbytes
 accelerate
-python-dotenv
+# python-dotenv
 pillow
 numpy
