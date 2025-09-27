@@ -31,6 +31,13 @@ from transformers.models.gemma3.modeling_gemma3 import Gemma3DecoderLayer
 import yaml
 
 
+class DtypeCorrectingSFTTrainer(SFTTrainer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # After PEFT model is created, but before FSDP wrapping, cast dtypes
+        if self.is_peft_model and self.args.bf16:
+            self.model.to(torch.bfloat16)
+
 class Trainer:
     """Handles FSDP training setup and execution"""
     
@@ -462,12 +469,21 @@ class Trainer:
             print(f"Training args: output_dir={training_args.output_dir}, epochs={training_args.num_train_epochs}")
             
             # Initialize trainer
-            trainer = SFTTrainer(
+            # trainer = SFTTrainer(
+            #     model=self.model,
+            #     args=training_args,
+            #     train_dataset=dataset,
+            #     peft_config=self._get_peft_config(),
+            #     # processing_class=self.processor,
+            #     data_collator=self.collate_fn,
+            # )
+
+            # Initialize the custom trainer
+            trainer = DtypeCorrectingSFTTrainer(
                 model=self.model,
                 args=training_args,
                 train_dataset=dataset,
                 peft_config=self._get_peft_config(),
-                # processing_class=self.processor,
                 data_collator=self.collate_fn,
             )
             print("✓ Trainer initialized successfully")
