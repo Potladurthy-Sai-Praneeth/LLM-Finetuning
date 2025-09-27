@@ -256,7 +256,7 @@ class Trainer:
         # Build ignored modules list for FSDP
         self.ignore_modules = []
         for module in self.model.modules():
-            params = list(module.parameters(recurse=True))
+            params = list(module.parameters(recurse=False))
             if params and all(not p.requires_grad for p in params):
                 self.ignore_modules.append(module)
     
@@ -301,7 +301,7 @@ class Trainer:
             num_train_epochs=int(self.config['training']['NUM_TRAIN_EPOCHS']),
             per_device_train_batch_size=effective_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
-            gradient_checkpointing=False,
+            gradient_checkpointing=True,
             gradient_checkpointing_kwargs = {"use_reentrant": False},
             optim="adamw_torch_fused",
             logging_steps=int(self.config['training']['LOGGING_STEPS']),
@@ -321,6 +321,7 @@ class Trainer:
                 "fsdp_transformer_layer_cls_to_wrap": ['Gemma3DecoderLayer'],
                 "fsdp_offload_params": True,
                 "fsdp_use_orig_params": True, 
+                "fsdp_activation_checkpointing": True
             }
         )
     

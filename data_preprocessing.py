@@ -1,5 +1,6 @@
 import os
 from torch.utils.data import Dataset
+from PIL import Image
 
 
 class CustomDataset(Dataset):
@@ -49,8 +50,9 @@ class CustomDataset(Dataset):
         point = self.dataset[sample_idx]
         question = point['questions'][qa_idx]
         answer = point['answers'][qa_idx]
-        image = point['image']
-
+        image = point['image']        
+        image = image.resize((448, 448))
+        
         return self.format_data(image,question,answer)
 
 
