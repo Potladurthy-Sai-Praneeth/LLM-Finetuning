@@ -269,7 +269,7 @@ class Trainer:
         self.model = FSDP(
             self.model,
             auto_wrap_policy=self.auto_wrap_policy,
-            mixed_precision=self.mixed_precision_policy,
+            # mixed_precision=self.mixed_precision_policy,
             device_id=self.local_rank,
             sharding_strategy=ShardingStrategy.FULL_SHARD,
             limit_all_gathers=True,
