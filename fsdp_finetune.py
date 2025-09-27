@@ -301,7 +301,7 @@ class Trainer:
             num_train_epochs=int(self.config['training']['NUM_TRAIN_EPOCHS']),
             per_device_train_batch_size=effective_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
-            gradient_checkpointing=True,
+            gradient_checkpointing=False,
             gradient_checkpointing_kwargs = {"use_reentrant": False},
             optim="adamw_torch_fused",
             logging_steps=int(self.config['training']['LOGGING_STEPS']),
@@ -444,13 +444,13 @@ class Trainer:
             print("✓ Model and processor loaded successfully")
             
             # Only apply FSDP if enabled
-            if self.use_fsdp:
-                print("\n[STEP 4] Setting up FSDP...")
-                self._setup_fsdp_policies()
-                self._apply_fsdp()
-                print("✓ FSDP setup completed")
-            else:
-                print("\n[STEP 4] Skipping FSDP (disabled in config)")
+            # if self.use_fsdp:
+            #     print("\n[STEP 4] Setting up FSDP...")
+            #     self._setup_fsdp_policies()
+            #     self._apply_fsdp()
+            #     print("✓ FSDP setup completed")
+            # else:
+            #     print("\n[STEP 4] Skipping FSDP (disabled in config)")
 
             print("\n[STEP 5] Loading dataset...")
             print(f"Dataset ID: {self.config['dataset']['DATASET_ID']}")
