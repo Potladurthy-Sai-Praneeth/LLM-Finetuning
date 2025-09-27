@@ -313,6 +313,7 @@ class Trainer:
             dataset_kwargs={"skip_prepare_dataset": True},
             remove_unused_columns=False,
             save_only_model=True,
+            dataloader_pin_memory=False,
             # Tell the trainer to use FSDP
             fsdp="full_shard auto_wrap",
             fsdp_config={
@@ -327,92 +328,151 @@ class Trainer:
         if self.processor is None:
             raise ValueError("Processor not initialized")
 
-        # Process each sample individually and collect the processed outputs
-        processed_batches = []
+        # Pre-extract all valid samples to avoid multiple iterations
+        valid_samples = []
         for example in batch:
-            # Extract text and image from the single example
-            chat_text = self.processor.apply_chat_template(
-                example["messages"], add_generation_prompt=False, tokenize=False
-            )
-            
             user_message = next(
                 (msg for msg in example.get("messages", []) if msg.get("role") == "user"), None
             )
             
-            image_value = None
-            if user_message:
-                image_content = next(
-                    (content for content in user_message.get("content", []) if content.get("type") == "image"), None
-                )
-                if image_content:
-                    image_value = image_content.get("image")
-
-            if image_value is None:
+            if not user_message:
+                continue
+                
+            image_content = next(
+                (content for content in user_message.get("content", []) if content.get("type") == "image"), None
+            )
+            
+            if not image_content or not image_content.get("image"):
                 if self.rank == 0:
                     print("Warning: Skipping a sample due to a missing image.")
                 continue
+                
+            chat_text = self.processor.apply_chat_template(
+                example["messages"], add_generation_prompt=False, tokenize=False
+            )
+            
+            valid_samples.append((chat_text.strip(), image_content["image"]))
 
-            # The processor expects lists, so wrap text and image in lists
-            try:
-                inputs = self.processor(
-                    text=[chat_text.strip()], 
-                    images=[image_value], 
-                    return_tensors="pt", 
-                    padding=True, 
-                    max_length=512, 
-                    truncation=True
-                )
-                processed_batches.append(inputs)
-            except Exception as e:
-                if self.rank == 0:
-                    print(f"Warning: Skipping a sample due to processor error: {e}")
-                continue
-
-        if not processed_batches:
-            # Return an empty dictionary if all samples in the batch were skipped
+        if not valid_samples:
             return {}
 
-        # Manually collate the processed batches
-        # This part needs to handle padding between samples of different lengths
-        # A simple approach is to find the max length and pad everything to it.
-        max_len = max(b["input_ids"].shape[1] for b in processed_batches)
-
-        input_ids_list = []
-        attention_mask_list = []
-        pixel_values_list = []
-
-        for b in processed_batches:
-            # Pad input_ids and attention_mask to the max length in the batch
-            pad_len = max_len - b["input_ids"].shape[1]
-            if pad_len > 0:
-                # Use the processor's pad_token_id for padding
-                pad_tensor_ids = torch.full((1, pad_len), self.processor.tokenizer.pad_token_id, dtype=torch.long)
-                input_ids = torch.cat([b["input_ids"], pad_tensor_ids], dim=1)
-                
-                pad_tensor_mask = torch.full((1, pad_len), 0, dtype=torch.long)
-                attention_mask = torch.cat([b["attention_mask"], pad_tensor_mask], dim=1)
-            else:
-                input_ids = b["input_ids"]
-                attention_mask = b["attention_mask"]
-
-            input_ids_list.append(input_ids)
-            attention_mask_list.append(attention_mask)
-            pixel_values_list.append(b["pixel_values"])
-
-        # Stack the tensors to create the final batch
-        final_batch = {
-            "input_ids": torch.cat(input_ids_list, dim=0),
-            "attention_mask": torch.cat(attention_mask_list, dim=0),
-            "pixel_values": torch.cat(pixel_values_list, dim=0),
-        }
-
-        # Create labels
-        labels = final_batch["input_ids"].clone()
-        labels[labels == self.processor.tokenizer.pad_token_id] = -100
-        labels[final_batch['attention_mask'] == 0] = -100
-        final_batch['labels'] = labels
+        # Batch process all valid samples at once
+        texts, images = zip(*valid_samples)
         
-        return final_batch
+        try:
+            inputs = self.processor(
+                text=list(texts), 
+                images=list(images), 
+                return_tensors="pt", 
+                padding=True, 
+                max_length=512, 
+                truncation=True
+            )
+        except Exception as e:
+            if self.rank == 0:
+                print(f"Warning: Batch processing failed: {e}")
+            return {}
+
+        # Create labels efficiently using in-place operations where possible
+        labels = inputs["input_ids"].clone()
+        pad_token_mask = (labels == self.processor.tokenizer.pad_token_id)
+        attention_mask_zero = (inputs['attention_mask'] == 0)
+        
+        labels[pad_token_mask | attention_mask_zero] = -100
+        inputs['labels'] = labels
+        
+        return inputs
+    
+    # def collate_fn(self, batch):
+    #     if self.processor is None:
+    #         raise ValueError("Processor not initialized")
+
+    #     # Process each sample individually and collect the processed outputs
+    #     processed_batches = []
+    #     for example in batch:
+    #         # Extract text and image from the single example
+    #         chat_text = self.processor.apply_chat_template(
+    #             example["messages"], add_generation_prompt=False, tokenize=False
+    #         )
+            
+    #         user_message = next(
+    #             (msg for msg in example.get("messages", []) if msg.get("role") == "user"), None
+    #         )
+            
+    #         image_value = None
+    #         if user_message:
+    #             image_content = next(
+    #                 (content for content in user_message.get("content", []) if content.get("type") == "image"), None
+    #             )
+    #             if image_content:
+    #                 image_value = image_content.get("image")
+
+    #         if image_value is None:
+    #             if self.rank == 0:
+    #                 print("Warning: Skipping a sample due to a missing image.")
+    #             continue
+
+    #         # The processor expects lists, so wrap text and image in lists
+    #         try:
+    #             inputs = self.processor(
+    #                 text=[chat_text.strip()], 
+    #                 images=[image_value], 
+    #                 return_tensors="pt", 
+    #                 padding=True, 
+    #                 max_length=512, 
+    #                 truncation=True
+    #             )
+    #             processed_batches.append(inputs)
+    #         except Exception as e:
+    #             if self.rank == 0:
+    #                 print(f"Warning: Skipping a sample due to processor error: {e}")
+    #             continue
+
+    #     if not processed_batches:
+    #         # Return an empty dictionary if all samples in the batch were skipped
+    #         return {}
+
+    #     # Manually collate the processed batches
+    #     # This part needs to handle padding between samples of different lengths
+    #     # A simple approach is to find the max length and pad everything to it.
+    #     max_len = max(b["input_ids"].shape[1] for b in processed_batches)
+
+    #     input_ids_list = []
+    #     attention_mask_list = []
+    #     pixel_values_list = []
+
+    #     for b in processed_batches:
+    #         # Pad input_ids and attention_mask to the max length in the batch
+    #         pad_len = max_len - b["input_ids"].shape[1]
+    #         if pad_len > 0:
+    #             # Use the processor's pad_token_id for padding
+    #             pad_tensor_ids = torch.full((1, pad_len), self.processor.tokenizer.pad_token_id, dtype=torch.long)
+    #             input_ids = torch.cat([b["input_ids"], pad_tensor_ids], dim=1)
+                
+    #             pad_tensor_mask = torch.full((1, pad_len), 0, dtype=torch.long)
+    #             attention_mask = torch.cat([b["attention_mask"], pad_tensor_mask], dim=1)
+    #         else:
+    #             input_ids = b["input_ids"]
+    #             attention_mask = b["attention_mask"]
+
+    #         input_ids_list.append(input_ids)
+    #         attention_mask_list.append(attention_mask)
+    #         pixel_values_list.append(b["pixel_values"])
+
+    #     # Stack the tensors to create the final batch
+    #     final_batch = {
+    #         "input_ids": torch.cat(input_ids_list, dim=0),
+    #         "attention_mask": torch.cat(attention_mask_list, dim=0),
+    #         "pixel_values": torch.cat(pixel_values_list, dim=0),
+    #     }
+
+    #     # Create labels
+    #     labels = final_batch["input_ids"].clone()
+    #     labels[labels == self.processor.tokenizer.pad_token_id] = -100
+    #     labels[final_batch['attention_mask'] == 0] = -100
+    #     final_batch['labels'] = labels
+        
+    #     return final_batch
 
     def train(self): 
         try:
