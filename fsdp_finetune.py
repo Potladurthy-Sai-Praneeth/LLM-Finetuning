@@ -310,7 +310,7 @@ class Trainer:
             fsdp="full_shard auto_wrap",
             fsdp_config={
                 "fsdp_auto_wrap_policy": "TRANSFORMER_BASED_WRAP",
-                "fsdp_transformer_layer_cls_to_wrap": [Gemma3DecoderLayer],
+                "fsdp_transformer_layer_cls_to_wrap": ['Gemma3DecoderLayer'],
                 "fsdp_offload_params": True,
                 "fsdp_use_orig_params": True, 
             }
