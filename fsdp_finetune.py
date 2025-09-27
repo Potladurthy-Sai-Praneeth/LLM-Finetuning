@@ -269,7 +269,7 @@ class Trainer:
         self.model = FSDP(
             self.model,
             auto_wrap_policy=self.auto_wrap_policy,
-            # mixed_precision=self.mixed_precision_policy,
+            mixed_precision=self.mixed_precision_policy,
             device_id=self.local_rank,
             sharding_strategy=ShardingStrategy.FULL_SHARD,
             limit_all_gathers=True,
@@ -302,7 +302,6 @@ class Trainer:
             per_device_train_batch_size=effective_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
             gradient_checkpointing=True,
-            # This is the critical change to fix the buffer mismatch error with FSDP
             gradient_checkpointing_kwargs = {"use_reentrant": False},
             optim="adamw_torch_fused",
             logging_steps=int(self.config['training']['LOGGING_STEPS']),
