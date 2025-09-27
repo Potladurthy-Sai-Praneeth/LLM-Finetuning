@@ -237,7 +237,7 @@ class Trainer:
         )
 
         self.mixed_precision_policy = MixedPrecision(
-            param_dtype=torch.float32,
+            param_dtype=torch.bfloat16,
             reduce_dtype=torch.bfloat16,
             buffer_dtype=torch.bfloat16,
             cast_forward_inputs=True,
@@ -294,7 +294,8 @@ class Trainer:
             per_device_train_batch_size=effective_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
             gradient_checkpointing=True,
-            gradient_checkpointing_kwargs = {'use_reentrant': True},
+            # This is the critical change to fix the buffer mismatch error with FSDP
+            gradient_checkpointing_kwargs = {"use_reentrant": False},
             optim="adamw_torch_fused",
             logging_steps=int(self.config['training']['LOGGING_STEPS']),
             save_strategy="epoch",
@@ -305,6 +306,14 @@ class Trainer:
             dataset_kwargs={"skip_prepare_dataset": True},
             remove_unused_columns=False,
             save_only_model=True,
+            # Tell the trainer to use FSDP
+            fsdp="full_shard auto_wrap",
+            fsdp_config={
+                "fsdp_auto_wrap_policy": "TRANSFORMER_BASED_WRAP",
+                "fsdp_transformer_layer_cls_to_wrap": [Gemma3DecoderLayer],
+                "fsdp_offload_params": True,
+                "fsdp_use_orig_params": True, 
+            }
         )
     
     def collate_fn(self, batch):
