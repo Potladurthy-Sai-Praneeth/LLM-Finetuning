@@ -33,9 +33,10 @@ import yaml
 
 class DtypeCorrectingSFTTrainer(SFTTrainer):
     def __init__(self, *args, **kwargs):
+        peft_config = kwargs.get("peft_config")
         super().__init__(*args, **kwargs)
         # After PEFT model is created, but before FSDP wrapping, cast dtypes
-        if self.is_peft_model and self.args.bf16:
+        if peft_config and self.args.bf16:
             self.model.to(torch.bfloat16)
 
 class Trainer:
