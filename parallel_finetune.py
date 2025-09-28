@@ -105,8 +105,8 @@ class Trainer:
             num_train_epochs=int(self.config['training']['NUM_TRAIN_EPOCHS']),
             per_device_train_batch_size=effective_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
-            gradient_checkpointing=True,
-            gradient_checkpointing_kwargs = {"use_reentrant": False},
+            activation_checkpointing=True,
+            # gradient_checkpointing_kwargs = {"use_reentrant": False},
             optim="adamw_torch_fused",
             logging_steps=int(self.config['training']['LOGGING_STEPS']),
             save_strategy="epoch",
@@ -126,6 +126,7 @@ class Trainer:
         )
     
     def train(self): 
+        torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
         try:
             print("="*50)
             print("Starting training")
