@@ -16,8 +16,18 @@ from transformers import (
 )
 from peft import LoraConfig, prepare_model_for_kbit_training, PeftModel
 from trl import SFTTrainer, SFTConfig
-from transformers.models.gemma3.modeling_gemma3 import Gemma3DecoderLayer
 import yaml
+from torch.distributed.fsdp.wrap import lambda_auto_wrap_policy
+from transformers.models.gemma3.modeling_gemma3 import Gemma3DecoderLayer
+from typing import Callable
+
+class CustomSFTTrainer(SFTTrainer):
+    def _fsdp_qlora_plugin_updates(self):
+        def lambda_fn(module):
+            return isinstance(module, Gemma3DecoderLayer)
+        
+        custom_policy: Callable = lambda_auto_wrap_policy(lambda_fn)
+        self.accelerator.state.fsdp_plugin.auto_wrap_policy = custom_policy
 
 
 class Trainer:
@@ -159,7 +169,7 @@ class Trainer:
             print(f"Training args: output_dir={training_args.output_dir}, epochs={training_args.num_train_epochs}")
             
             # Initialize trainer
-            trainer = SFTTrainer(
+            trainer = CustomSFTTrainer(
                 model=self.model,
                 args=training_args,
                 train_dataset=dataset,
