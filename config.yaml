@@ -25,8 +25,8 @@ training:
   EVAL_STEPS : 500
   LOGGING_STEPS : 10
   SEED : 42
-  MERGED_MODEL_DIR : "gemma-medical-merged"
-  USE_FSDP : true  # Set to false to disable FSDP for single GPU
+  # MERGED_MODEL_DIR : "gemma-medical-merged"
+  # USE_FSDP : true  # Set to false to disable FSDP for single GPU
 
 lora:
   LORA_R : 8
@@ -35,3 +35,17 @@ lora:
   TASK_TYPE : "CAUSAL_LM"
   MODULES_TO_SAVE : ["lm_head", "embed_tokens"]
   TARGET_MODULES : ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+
+fsdp:
+  fsdp_auto_wrap_policy: 'TRANSFORMER_BASED_WRAP'
+  fsdp_backward_prefetch: 'BACKWARD_PRE'
+  fsdp_cpu_ram_efficient_loading: True
+  fsdp_forward_prefetch: False
+  fsdp_offload_params: True
+  fsdp_sharding_strategy: 'FULL_SHARD'  
+  fsdp_state_dict_type: 'SHARDED_STATE_DICT'
+  fsdp_sync_module_states: True
+  fsdp_use_orig_params: False
+  fsdp_offload_optimizer: True 
+  fsdp_activation_offload: True
+  fsdp_transformer_layer_cls_to_wrap: ['Gemma3DecoderLayer']
