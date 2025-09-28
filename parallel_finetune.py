@@ -147,7 +147,7 @@ class Trainer:
             logging_steps=int(self.config['training']['LOGGING_STEPS']),
             save_strategy="epoch",
             learning_rate=float(self.config['training']['LEARNING_RATE']),
-            # bf16=True,
+            bf16=False,
             fp32=True,
             lr_scheduler_type="cosine",
             dataset_text_field='',
