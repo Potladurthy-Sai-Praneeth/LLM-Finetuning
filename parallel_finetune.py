@@ -100,18 +100,19 @@ class Trainer:
         )
         print("Processor loaded successfully")
 
-        print("Applying PEFT configuration...")
-        self.model = prepare_model_for_kbit_training(model)
-        print("Model configuration completed")
+        # print("Applying PEFT configuration...")
+        # self.model = prepare_model_for_kbit_training(model)
+        # print("Model configuration completed")
+        self.model = model
 
-        print("Casting specific modules to bfloat16 for FSDP compatibility...")
-        for name, module in self.model.named_modules():
-        # Target norms and the output layer
-            if 'norm' in name or 'lm_head' in name:
-                # Check if the module has a weight parameter and if its dtype is not bfloat16
-                if hasattr(module, 'weight') and module.weight.dtype != torch.bfloat16:
-                    # print(f"  - Casting {name} from {module.weight.dtype} to torch.bfloat16")
-                    module.to(torch.bfloat16)
+        # print("Casting specific modules to bfloat16 for FSDP compatibility...")
+        # for name, module in self.model.named_modules():
+        # # Target norms and the output layer
+        #     if 'norm' in name or 'lm_head' in name:
+        #         # Check if the module has a weight parameter and if its dtype is not bfloat16
+        #         if hasattr(module, 'weight') and module.weight.dtype != torch.bfloat16:
+        #             # print(f"  - Casting {name} from {module.weight.dtype} to torch.bfloat16")
+        #             module.to(torch.bfloat16)
 
     def get_training_args(self):
         """Get training arguments configuration"""
