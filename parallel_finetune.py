@@ -23,10 +23,9 @@ from typing import Callable
 
 class CustomSFTTrainer(SFTTrainer):
     def _fsdp_qlora_plugin_updates(self):
-        def lambda_fn(module):
+        def custom_policy(module, recurse, nonwrapped_numel) -> bool:
             return isinstance(module, Gemma3DecoderLayer)
         
-        custom_policy: Callable = lambda_auto_wrap_policy(lambda_fn)
         self.accelerator.state.fsdp_plugin.auto_wrap_policy = custom_policy
 
 
