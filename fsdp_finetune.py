@@ -176,19 +176,26 @@ class Trainer:
         """Load and configure model and processor for training"""
         print("Loading model and processor...")
         
-        # Determine device mapping
-        if torch.cuda.is_available() and local_rank < torch.cuda.device_count():
-            device_map = {'': local_rank}
-            print(f"Using GPU {local_rank} for model loading")
-        else:
+        # IMPORTANT: FSDP cannot shard bitsandbytes 4-bit quantized base weights.
+        # When FSDP is enabled, we load the model on CPU without quantization and let FSDP shard it.
+        # When FSDP is disabled (QLoRA path), we use 4-bit quantization and leverage HF device_map for model parallelism.
+
+        using_fsdp_path = bool(self.use_fsdp)
+
+        if using_fsdp_path:
+            print("FSDP is enabled: loading UN-quantized model on CPU to allow sharding across GPUs")
             device_map = 'cpu'
-            print("Using CPU for model loading")
+            quantization_config = None
+        else:
+            print("FSDP is disabled: using QLoRA with 4-bit quantization and device_map for model parallelism")
+            # With multiple GPUs, use 'auto' to spread layers across GPUs and reduce per-GPU memory
+            device_map = "auto" if (torch.cuda.is_available() and torch.cuda.device_count() > 1) else ({'': local_rank} if torch.cuda.is_available() else 'cpu')
+            quantization_config = self._get_quantization_config()
         
         print(f"Loading model: {self.config['model']['BASE_MODEL_ID']}")
-        # Load model
         model = AutoModelForImageTextToText.from_pretrained(
             self.config['model']['BASE_MODEL_ID'],
-            quantization_config=self._get_quantization_config(),
+            quantization_config=quantization_config,
             dtype=torch.bfloat16,
             device_map=device_map,
             trust_remote_code=True,
@@ -207,10 +214,16 @@ class Trainer:
         print("Processor loaded successfully")
 
         print("Applying PEFT configuration...")
-        # Apply PEFT
-        model = prepare_model_for_kbit_training(model)
-        # model = get_peft_model(model, self._get_peft_config())
-        # print("PEFT applied successfully")
+        if using_fsdp_path:
+            # Standard LoRA on full-precision weights; we attach LoRA before FSDP wrapping
+            model = get_peft_model(model, self._get_peft_config())
+            # Ensure uniform dtype for all params before FSDP flattening
+            model.to(torch.bfloat16)
+            print("LoRA attached (non-quantized) and model cast to bfloat16")
+        else:
+            # QLoRA path: prepare for k-bit training; LoRA layers will be attached by the Trainer via peft_config
+            model = prepare_model_for_kbit_training(model)
+            print("Model prepared for QLoRA (4-bit)")
 
         # # Freeze all parameters except LoRA layers
         # trainable_params = 0
@@ -296,13 +309,15 @@ class Trainer:
         effective_batch_size = int(self.config['training']['BATCH_SIZE']) // self.world_size
         gradient_accumulation_steps = int(self.config['training']['GRADIENT_ACCUMULATION_STEPS'])
 
+        # Disable HF Trainer-managed FSDP because we handle wrapping manually when self.use_fsdp is True.
+        # Also disable in QLoRA path because 4-bit bnb weights cannot be FSDP sharded.
         return SFTConfig(
             output_dir=self.config['training']['OUTPUT_DIR'],
             num_train_epochs=int(self.config['training']['NUM_TRAIN_EPOCHS']),
             per_device_train_batch_size=effective_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
             gradient_checkpointing=True,
-            gradient_checkpointing_kwargs = {"use_reentrant": False},
+            gradient_checkpointing_kwargs={"use_reentrant": False},
             optim="adamw_torch_fused",
             logging_steps=int(self.config['training']['LOGGING_STEPS']),
             save_strategy="epoch",
@@ -314,15 +329,8 @@ class Trainer:
             remove_unused_columns=False,
             save_only_model=True,
             dataloader_pin_memory=False,
-            # Tell the trainer to use FSDP
-            fsdp="full_shard auto_wrap",
-            fsdp_config={
-                "fsdp_auto_wrap_policy": "TRANSFORMER_BASED_WRAP",
-                "fsdp_transformer_layer_cls_to_wrap": ['Gemma3DecoderLayer'],
-                "fsdp_offload_params": True,
-                "fsdp_use_orig_params": True, 
-                "fsdp_activation_checkpointing": True
-            }
+            fsdp="",
+            fsdp_config=None,
         )
     
     def collate_fn(self, batch):
@@ -505,13 +513,13 @@ class Trainer:
             print("✓ Model and processor loaded successfully")
             
             # Only apply FSDP if enabled
-            # if self.use_fsdp:
-            #     print("\n[STEP 4] Setting up FSDP...")
-            #     self._setup_fsdp_policies()
-            #     self._apply_fsdp()
-            #     print("✓ FSDP setup completed")
-            # else:
-            #     print("\n[STEP 4] Skipping FSDP (disabled in config)")
+            if self.use_fsdp:
+                print("\n[STEP 4] Setting up FSDP...")
+                self._setup_fsdp_policies()
+                self._apply_fsdp()
+                print("✓ FSDP setup completed")
+            else:
+                print("\n[STEP 4] Skipping FSDP (disabled in config)")
 
             print("\n[STEP 5] Loading dataset...")
             print(f"Dataset ID: {self.config['dataset']['DATASET_ID']}")
@@ -540,13 +548,23 @@ class Trainer:
             # )
 
             # Initialize the custom trainer
-            trainer = DtypeCorrectingSFTTrainer(
-                model=self.model,
-                args=training_args,
-                train_dataset=dataset,
-                peft_config=self._get_peft_config(),
-                data_collator=self.collate_fn,
-            )
+            if self.use_fsdp:
+                # LoRA already attached; do NOT pass peft_config to avoid double application
+                trainer = DtypeCorrectingSFTTrainer(
+                    model=self.model,
+                    args=training_args,
+                    train_dataset=dataset,
+                    data_collator=self.collate_fn,
+                )
+            else:
+                # QLoRA path: pass peft_config so trainer attaches LoRA on quantized base
+                trainer = DtypeCorrectingSFTTrainer(
+                    model=self.model,
+                    args=training_args,
+                    train_dataset=dataset,
+                    peft_config=self._get_peft_config(),
+                    data_collator=self.collate_fn,
+                )
             print("✓ Trainer initialized successfully")
 
             print("\n[STEP 7] Starting training loop...")

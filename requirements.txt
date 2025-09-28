@@ -1,10 +1,10 @@
-torch
-transformers
-datasets
-peft
-trl
-bitsandbytes
-accelerate
-# python-dotenv
+transformers>=4.45.0
+peft>=0.13.0
+accelerate>=0.34.2
+trl>=0.11.4
+bitsandbytes>=0.43.3
+datasets>=2.14.1
+torch>=2.3.0
+torchvision>=0.18.0
+torchaudio>=2.3.0
 pillow
-numpy

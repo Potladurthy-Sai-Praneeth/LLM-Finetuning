@@ -48,4 +48,34 @@ fsdp:
   fsdp_use_orig_params: False
   fsdp_offload_optimizer: True 
   fsdp_activation_offload: True
-  fsdp_transformer_layer_cls_to_wrap: ['Gemma3DecoderLayer']
+  # fsdp_transformer_layer_cls_to_wrap: ['Gemma3DecoderLayer']
+
+
+
+
+# All unique module types in the Gemma3 VLM model:
+#   - AvgPool2d
+#   - Conv2d
+#   - Embedding
+#   - Gemma3Attention
+#   - Gemma3DecoderLayer
+#   - Gemma3ForConditionalGeneration
+#   - Gemma3MLP
+#   - Gemma3Model
+#   - Gemma3MultiModalProjector
+#   - Gemma3RMSNorm
+#   - Gemma3RotaryEmbedding
+#   - Gemma3TextModel
+#   - Gemma3TextScaledWordEmbedding
+#   - LayerNorm
+#   - Linear
+#   - Linear4bit
+#   - ModuleList
+#   - PytorchGELUTanh
+#   - SiglipAttention
+#   - SiglipEncoder
+#   - SiglipEncoderLayer
+#   - SiglipMLP
+#   - SiglipVisionEmbeddings
+#   - SiglipVisionModel
+#   - SiglipVisionTransformer
