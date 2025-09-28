@@ -121,9 +121,9 @@ class Trainer:
             # Tell the trainer to use FSDP
             fsdp='full_shard',
             fsdp_config={
-                **self.config['fsdp']
+                **self.config['fsdp'],
+                'fsdp_transformer_layer_cls_to_wrap': Gemma3DecoderLayer
             }
-            fsdp_config['fsdp_transformer_layer_cls_to_wrap'] = Gemma3DecoderLayer
         )
     
     def train(self): 
