@@ -148,7 +148,7 @@ class Trainer:
             save_strategy="epoch",
             learning_rate=float(self.config['training']['LEARNING_RATE']),
             bf16=False,
-            fp32=True,
+            tf32=True,
             lr_scheduler_type="cosine",
             dataset_text_field='',
             dataset_kwargs={"skip_prepare_dataset": True},
