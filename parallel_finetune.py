@@ -102,6 +102,11 @@ class Trainer:
 
         # print("Applying PEFT configuration...")
         self.model = prepare_model_for_kbit_training(model)
+
+        for name, module in model.named_modules():
+            if "lora_" in name:
+                module.to(torch.bfloat16)
+                
         print("Model configuration completed")
 
     def get_training_args(self):
