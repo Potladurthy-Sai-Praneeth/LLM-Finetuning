@@ -143,7 +143,6 @@ class Trainer:
             dataloader_pin_memory=False,
             # Tell the trainer to use FSDP
             fsdp='full_shard',
-            fsdp_use_orig_params=True,
             fsdp_config={
                 'fsdp_transformer_layer_cls_to_wrap': [Gemma3DecoderLayer],
                 **self.config['fsdp']
