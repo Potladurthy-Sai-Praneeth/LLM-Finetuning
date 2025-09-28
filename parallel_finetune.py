@@ -103,7 +103,6 @@ class Trainer:
         # print("Applying PEFT configuration...")
         self.model = prepare_model_for_kbit_training(model)
 
-
         print("Model configuration completed")
 
     def get_training_args(self):
@@ -178,9 +177,9 @@ class Trainer:
             )
             print("✓ Trainer initialized successfully")
 
-            for name, module in self.model.named_modules():
+            for name, module in trainer.model.named_modules():
                 if "lora_" in name:
-                    module.to(torch.bfloat16)
+                    module.to(torch.bfloat16)   
 
             print("\n[STEP 4] Starting training loop...")
             trainer.train()
