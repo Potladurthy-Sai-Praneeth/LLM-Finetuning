@@ -116,7 +116,7 @@ class Trainer:
 
     def get_training_args(self):
         """Get training arguments configuration"""
-        effective_batch_size = int(self.config['training']['BATCH_SIZE']) #// self.world_size
+        effective_batch_size = int(self.config['training']['BATCH_SIZE']) // int(os.environ["WORLD_SIZE"])
         gradient_accumulation_steps = int(self.config['training']['GRADIENT_ACCUMULATION_STEPS'])
 
         return SFTConfig(
