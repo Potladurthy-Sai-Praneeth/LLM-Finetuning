@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import traceback
+import sys
 
 
 from data_preprocessing import CustomDataset
@@ -121,8 +122,8 @@ class Trainer:
             # Tell the trainer to use FSDP
             fsdp='full_shard',
             fsdp_config={
-                **self.config['fsdp'],
-                'fsdp_transformer_layer_cls_to_wrap': Gemma3DecoderLayer
+                'fsdp_transformer_layer_cls_to_wrap': [Gemma3DecoderLayer],
+                **self.config['fsdp']
             }
         )
     
@@ -140,6 +141,27 @@ class Trainer:
             print("\n[STEP 1] Loading model and processor...")
             self.load_model_and_processor()
             print("✓ Model and processor loaded successfully")
+
+            if int(os.environ.get("RANK", 0)) == 0:
+                print("\n" + "="*80)
+                print("[DEBUG] Inspecting model architecture to find the correct transformer layer class...")
+                print("All unique module types in the model:")
+                
+                # Use a set to store unique class names
+                all_module_types = {type(module).__name__ for module in self.model.modules()}
+                
+                # Print them in a sorted list for easy reading
+                for module_type in sorted(list(all_module_types)):
+                    print(f"  - {module_type}")
+                
+                print("-" * 80)
+                print("INSTRUCTION: Look for the class name that represents the main transformer block.")
+                print("It will likely contain 'DecoderLayer', 'AttentionBlock', or 'TransformerBlock'.")
+                print("Update your script with this name and then remove this debug block.")
+                print("="*80 + "\n")
+            
+            # Stop the script after printing the debug info
+            sys.exit("Debug inspection complete. Update your script with the correct layer name and re-run.")
 
             print("\n[STEP 2] Loading dataset...")
             print(f"Dataset ID: {self.config['dataset']['DATASET_ID']}")
