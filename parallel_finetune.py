@@ -169,7 +169,7 @@ class Trainer:
             
             # Initialize trainer
             trainer = CustomSFTTrainer(
-                model=self.model,
+                model=self.model.to(torch.bfloat16),
                 args=training_args,
                 train_dataset=dataset,
                 peft_config=self._get_peft_config(),
