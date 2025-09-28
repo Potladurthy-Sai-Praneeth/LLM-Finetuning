@@ -9,3 +9,4 @@ torchvision>=0.19.0
 torchaudio>=2.4.0
 pillow
 PyYAML>=6.0
+deepspeed>=0.14.0

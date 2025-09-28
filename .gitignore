@@ -1,3 +1,2 @@
 *.ipynb
-fsdp_qlora_config.yaml
 .env

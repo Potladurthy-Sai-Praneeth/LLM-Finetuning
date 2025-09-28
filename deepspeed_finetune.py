@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 import traceback
 import sys
-
+import json
 
 from data_preprocessing import CustomDataset
 from inference import get_merged_model
@@ -17,21 +17,12 @@ from transformers import (
 from peft import LoraConfig, prepare_model_for_kbit_training, PeftModel
 from trl import SFTTrainer, SFTConfig
 import yaml
-from torch.distributed.fsdp.wrap import lambda_auto_wrap_policy
-from transformers.models.gemma3.modeling_gemma3 import Gemma3DecoderLayer, Gemma3RMSNorm
-from typing import Callable
-
-class CustomSFTTrainer(SFTTrainer):
-    def _fsdp_qlora_plugin_updates(self):
-        def custom_policy(module, recurse, nonwrapped_numel) -> bool:
-            return isinstance(module, Gemma3DecoderLayer)
-        
-        self.accelerator.state.fsdp_plugin.auto_wrap_policy = custom_policy
+import deepspeed
 
 
 class Trainer:
-    """Handles FSDP training setup and execution"""
-    
+    """Handles DeepSpeed training setup and execution"""
+
     def __init__(self):
         self.processor = None
         self.model = None
@@ -44,13 +35,21 @@ class Trainer:
         # Get the directory where this script is located
         script_dir = Path(__file__).parent
         config_path = script_dir / "config.yaml"
-        
+
         if not config_path.exists():
             raise FileNotFoundError(f"Config file not found at {config_path}")
-        
+
         with open(config_path, "r") as file:
             self.config = yaml.safe_load(file)
-        
+
+        # Load DeepSpeed configuration
+        ds_config_path = script_dir / "ds_config.json"
+        if not ds_config_path.exists():
+            raise FileNotFoundError(f"DeepSpeed config file not found at {ds_config_path}")
+
+        with open(ds_config_path, "r") as file:
+            self.ds_config = json.load(file)
+
         env_vars = self.config.get('environment', {})
         for key, value in env_vars.items():
             os.environ[key] = str(value)
@@ -64,7 +63,7 @@ class Trainer:
             bnb_4bit_compute_dtype=torch.bfloat16,
             bnb_4bit_quant_storage=torch.bfloat16,
         )
-    
+
     def _get_peft_config(self):
         """Get PEFT (LoRA) configuration - optimized for memory efficiency"""
         return LoraConfig(
@@ -106,8 +105,8 @@ class Trainer:
         print("Model configuration completed")
 
     def get_training_args(self):
-        """Get training arguments configuration"""
-        effective_batch_size = int(self.config['training']['BATCH_SIZE']) // int(os.environ["WORLD_SIZE"])
+        """Get training arguments configuration for DeepSpeed"""
+        effective_batch_size = int(self.config['training']['BATCH_SIZE']) // int(os.environ.get("WORLD_SIZE", 1))
         gradient_accumulation_steps = int(self.config['training']['GRADIENT_ACCUMULATION_STEPS'])
 
         return SFTConfig(
@@ -116,31 +115,24 @@ class Trainer:
             per_device_train_batch_size=effective_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
             gradient_checkpointing=True,
-            gradient_checkpointing_kwargs = {"use_reentrant": False},
-            optim="adamw_torch_fused",
+            gradient_checkpointing_kwargs={"use_reentrant": False},
             logging_steps=int(self.config['training']['LOGGING_STEPS']),
             save_strategy="epoch",
-            learning_rate=float(self.config['training']['LEARNING_RATE']),
             bf16=True,
-            lr_scheduler_type="cosine",
             dataset_text_field='',
             dataset_kwargs={"skip_prepare_dataset": True},
             remove_unused_columns=False,
             save_only_model=True,
             dataloader_pin_memory=False,
-            # Tell the trainer to use FSDP
-            fsdp='full_shard',
-            fsdp_config={
-                'fsdp_transformer_layer_cls_to_wrap': [Gemma3DecoderLayer],
-                **self.config['fsdp']
-            }
+            deepspeed=self.ds_config,
+            # Disable FSDP since we're using DeepSpeed
+            fsdp=None,
         )
-    
-    def train(self): 
-        torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
+
+    def train(self):
         try:
             print("="*50)
-            print("Starting training")
+            print("Starting DeepSpeed training")
             print(f"Model: {self.config['model']['BASE_MODEL_ID']}")
             print(f"Dataset: {self.config['dataset']['DATASET_ID']}")
             print(f"Batch size: {self.config['training']['BATCH_SIZE']}")
@@ -155,16 +147,16 @@ class Trainer:
             print(f"Dataset ID: {self.config['dataset']['DATASET_ID']}")
             raw_dataset = load_dataset(self.config['dataset']['DATASET_ID'], split="train")
             print("✓ Raw dataset loaded successfully")
-            
+
             dataset = CustomDataset(raw_dataset, self.processor)
             print(f"✓ Custom dataset created with {len(dataset)} samples")
-        
+
             print("\n[STEP 3] Initializing trainer...")
             training_args = self.get_training_args()
             print(f"Training args: output_dir={training_args.output_dir}, epochs={training_args.num_train_epochs}")
-            
+
             # Initialize trainer
-            trainer = CustomSFTTrainer(
+            trainer = SFTTrainer(
                 model=self.model,
                 args=training_args,
                 train_dataset=dataset,
@@ -182,8 +174,12 @@ class Trainer:
             trainer.save_model(adapter_path)
             print(f"✓ Adapter saved to {adapter_path}")
 
+            # Check if this is the main process (rank 0) for model merging
             if trainer.is_world_process_zero():
                 print("\n[STEP 6] Merging adapter with base model on main process (rank 0)...")
+
+                # For DeepSpeed, we need to gather the model from all processes first
+                trainer.model.save_pretrained(adapter_path)
 
                 base_model = AutoModelForImageTextToText.from_pretrained(
                     self.config['model']['BASE_MODEL_ID'],
@@ -201,12 +197,12 @@ class Trainer:
                 # Save the merged model
                 merged_model_path = os.path.join(self.config['training']['OUTPUT_DIR'], "final_merged_model")
                 merged_model.save_pretrained(merged_model_path)
-                
+
                 # Also save the tokenizer for easy future use
-                self.processor.tokenizer.save_pretrained(merged_model_path)
+                if self.processor and hasattr(self.processor, 'tokenizer'):
+                    self.processor.tokenizer.save_pretrained(merged_model_path)
 
                 print(f"✓ Merged model saved to {merged_model_path}")
-
 
         except Exception as e:
             print(f"\n✗ Error in training: {str(e)}")
@@ -214,13 +210,15 @@ class Trainer:
             traceback.print_exc()
             raise
 
-    
     def run(self):
-        """Run training"""
+        """Run training with DeepSpeed"""
         if not torch.cuda.is_available():
             raise RuntimeError("No CUDA devices available")
-        
-        print("Starting FSDP training...")
+
+        # Initialize DeepSpeed distributed training
+        deepspeed.init_distributed()
+
+        print("Starting DeepSpeed training...")
         self.train()
 
 
