@@ -18,7 +18,7 @@ from peft import LoraConfig, prepare_model_for_kbit_training, PeftModel
 from trl import SFTTrainer, SFTConfig
 import yaml
 from torch.distributed.fsdp.wrap import lambda_auto_wrap_policy
-from transformers.models.gemma3.modeling_gemma3 import Gemma3DecoderLayer
+from transformers.models.gemma3.modeling_gemma3 import Gemma3DecoderLayer, Gemma3RMSNorm
 from typing import Callable
 
 class CustomSFTTrainer(SFTTrainer):
@@ -77,6 +77,17 @@ class Trainer:
             target_modules=self.config['lora']['TARGET_MODULES']
         )
     
+    def _cast_mixed_precision_to_bf16(self, model):
+        # Ensure all float32 params inside decoder layers are bf16 (norms, biases, etc.)
+        for module in model.modules():
+            if isinstance(module, Gemma3DecoderLayer):
+                for p in module.parameters(recurse=True):
+                    if p.dtype == torch.float32:
+                        p.data = p.data.to(torch.bfloat16)
+                for sub in module.modules():
+                    if isinstance(sub, (torch.nn.LayerNorm, Gemma3RMSNorm)):
+                        sub.to(torch.bfloat16)
+    
     def load_model_and_processor(self):
         print(f"Loading model: {self.config['model']['BASE_MODEL_ID']}")
         # Load model
@@ -102,6 +113,8 @@ class Trainer:
 
         # print("Applying PEFT configuration...")
         self.model = prepare_model_for_kbit_training(model)
+
+        self._cast_mixed_precision_to_bf16(self.model)
 
         print("Model configuration completed")
 
@@ -130,6 +143,7 @@ class Trainer:
             dataloader_pin_memory=False,
             # Tell the trainer to use FSDP
             fsdp='full_shard',
+            fsdp_use_orig_params=True,
             fsdp_config={
                 'fsdp_transformer_layer_cls_to_wrap': [Gemma3DecoderLayer],
                 **self.config['fsdp']
@@ -180,6 +194,8 @@ class Trainer:
             for name, module in trainer.model.named_modules():
                 if "lora_" in name:
                     module.to(torch.bfloat16)   
+
+            self._cast_mixed_precision_to_bf16(trainer.model)
 
             print("\n[STEP 4] Starting training loop...")
             trainer.train()
