@@ -61,10 +61,8 @@ class Trainer:
             load_in_4bit=True,
             bnb_4bit_use_double_quant=True,
             bnb_4bit_quant_type="nf4",
-            # bnb_4bit_compute_dtype=torch.bfloat16,
-            # bnb_4bit_quant_storage=torch.bfloat16,
-            bnb_4bit_compute_dtype=torch.float32,
-            bnb_4bit_quant_storage=torch.float32,
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_quant_storage=torch.bfloat16,
         )
     
     def _get_peft_config(self):
@@ -78,27 +76,6 @@ class Trainer:
             modules_to_save=self.config['lora']['MODULES_TO_SAVE'],
             target_modules=self.config['lora']['TARGET_MODULES']
         )
-    
-    def _cast_mixed_precision_to_bf16(self, model):
-        """Ensure all parameters have consistent bf16 dtype for FSDP compatibility"""
-        print("Converting all model parameters to bfloat16...")
-        
-        # Convert all parameters to bfloat16
-        for name, param in model.named_parameters():
-            if param.dtype == torch.float32:
-                param.data = param.data.to(torch.bfloat16)
-        
-        # Convert all buffers to bfloat16
-        for name, buffer in model.named_buffers():
-            if buffer.dtype == torch.float32:
-                buffer.data = buffer.data.to(torch.bfloat16)
-        
-        # Ensure specific modules are in bfloat16
-        for module in model.modules():
-            if isinstance(module, (torch.nn.LayerNorm, Gemma3RMSNorm, torch.nn.Embedding)):
-                module.to(torch.bfloat16)
-        
-        print("✓ All parameters converted to bfloat16")
 
     def load_model_and_processor(self):
         print(f"Loading model: {self.config['model']['BASE_MODEL_ID']}")
@@ -106,7 +83,7 @@ class Trainer:
         model = AutoModelForImageTextToText.from_pretrained(
             self.config['model']['BASE_MODEL_ID'],
             quantization_config=self._get_quantization_config(),
-            # dtype=torch.float32,
+            dtype=torch.bfloat16,
             trust_remote_code=True,
             low_cpu_mem_usage=True,
         )
@@ -126,9 +103,6 @@ class Trainer:
         print("Preparing model for k-bit training...")
         self.model = prepare_model_for_kbit_training(model)
 
-        # Cast all parameters to bfloat16 BEFORE trainer initialization
-        # self._cast_mixed_precision_to_bf16(self.model)
-
         print("Model configuration completed")
 
     def get_training_args(self):
@@ -147,8 +121,7 @@ class Trainer:
             logging_steps=int(self.config['training']['LOGGING_STEPS']),
             save_strategy="epoch",
             learning_rate=float(self.config['training']['LEARNING_RATE']),
-            bf16=False,
-            tf32=True,
+            bf16=True,
             lr_scheduler_type="cosine",
             dataset_text_field='',
             dataset_kwargs={"skip_prepare_dataset": True},
@@ -181,11 +154,7 @@ class Trainer:
             print("\n[STEP 2] Loading dataset...")
             print(f"Dataset ID: {self.config['dataset']['DATASET_ID']}")
             raw_dataset = load_dataset(self.config['dataset']['DATASET_ID'], split="train")
-            try:
-                dataset_size = len(raw_dataset)  # type: ignore
-                print(f"✓ Raw dataset loaded with {dataset_size} samples")
-            except:
-                print("✓ Raw dataset loaded (size unknown for streaming dataset)")
+            print("✓ Raw dataset loaded successfully")
             
             dataset = CustomDataset(raw_dataset, self.processor)
             print(f"✓ Custom dataset created with {len(dataset)} samples")
@@ -203,13 +172,6 @@ class Trainer:
                 data_collator=dataset.collate_fn,
             )
             print("✓ Trainer initialized successfully")
-
-            # # Ensure LoRA parameters are in correct dtype
-            # print("Ensuring LoRA parameters are in bfloat16...")
-            # for name, module in trainer.model.named_modules():
-            #     if "lora_" in name:
-            #         module.to(torch.bfloat16)
-            # print("✓ LoRA parameters set to bfloat16")
 
             print("\n[STEP 4] Starting training loop...")
             trainer.train()
