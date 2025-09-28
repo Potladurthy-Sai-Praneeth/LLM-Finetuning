@@ -104,7 +104,7 @@ class Trainer:
         model = AutoModelForImageTextToText.from_pretrained(
             self.config['model']['BASE_MODEL_ID'],
             quantization_config=self._get_quantization_config(),
-            torch_dtype=torch.bfloat16,  # Explicitly set torch_dtype
+            # dtype=torch.float32,
             trust_remote_code=True,
             low_cpu_mem_usage=True,
         )
@@ -125,7 +125,7 @@ class Trainer:
         self.model = prepare_model_for_kbit_training(model)
 
         # Cast all parameters to bfloat16 BEFORE trainer initialization
-        self._cast_mixed_precision_to_bf16(self.model)
+        # self._cast_mixed_precision_to_bf16(self.model)
 
         print("Model configuration completed")
 
@@ -145,7 +145,7 @@ class Trainer:
             logging_steps=int(self.config['training']['LOGGING_STEPS']),
             save_strategy="epoch",
             learning_rate=float(self.config['training']['LEARNING_RATE']),
-            bf16=True,
+            # bf16=True,
             lr_scheduler_type="cosine",
             dataset_text_field='',
             dataset_kwargs={"skip_prepare_dataset": True},
@@ -201,12 +201,12 @@ class Trainer:
             )
             print("✓ Trainer initialized successfully")
 
-            # Ensure LoRA parameters are in correct dtype
-            print("Ensuring LoRA parameters are in bfloat16...")
-            for name, module in trainer.model.named_modules():
-                if "lora_" in name:
-                    module.to(torch.bfloat16)
-            print("✓ LoRA parameters set to bfloat16")
+            # # Ensure LoRA parameters are in correct dtype
+            # print("Ensuring LoRA parameters are in bfloat16...")
+            # for name, module in trainer.model.named_modules():
+            #     if "lora_" in name:
+            #         module.to(torch.bfloat16)
+            # print("✓ LoRA parameters set to bfloat16")
 
             print("\n[STEP 4] Starting training loop...")
             trainer.train()
