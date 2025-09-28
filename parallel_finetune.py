@@ -100,9 +100,6 @@ class Trainer:
         )
         print("Processor loaded successfully")
 
-        model.to(torch.bfloat16)
-        print("LoRA attached (non-quantized) and model cast to bfloat16")
-
         print("Applying PEFT configuration...")
         self.model = prepare_model_for_kbit_training(model)
         print("Model configuration completed")
