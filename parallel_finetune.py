@@ -103,7 +103,14 @@ class Trainer:
         print("Applying PEFT configuration...")
         self.model = prepare_model_for_kbit_training(model)
         print("Model configuration completed")
-    
+
+        print("Casting specific modules to bfloat16 for FSDP compatibility...")
+        for name, module in self.model.named_modules():
+            # PEFT upcasts norms and lm_head to float32 for stability, must be cast back
+            if 'norm' in name or 'lm_head' in name:
+                if module.dtype != torch.bfloat16:
+                    # print(f"  - Casting {name} from {module.dtype} to torch.bfloat16")
+                    module.to(torch.bfloat16)
 
     def get_training_args(self):
         """Get training arguments configuration"""
