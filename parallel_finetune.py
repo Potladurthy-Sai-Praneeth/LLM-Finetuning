@@ -100,6 +100,9 @@ class Trainer:
         )
         print("Processor loaded successfully")
 
+        model.to(torch.bfloat16)
+        print("LoRA attached (non-quantized) and model cast to bfloat16")
+
         print("Applying PEFT configuration...")
         self.model = prepare_model_for_kbit_training(model)
         print("Model configuration completed")
@@ -169,7 +172,7 @@ class Trainer:
             
             # Initialize trainer
             trainer = CustomSFTTrainer(
-                model=self.model.to(torch.bfloat16),
+                model=self.model,
                 args=training_args,
                 train_dataset=dataset,
                 peft_config=self._get_peft_config(),
