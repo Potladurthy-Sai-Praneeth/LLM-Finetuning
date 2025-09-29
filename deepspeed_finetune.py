@@ -8,6 +8,7 @@ from data_preprocessing import CustomDataset
 from inference import get_merged_model
 
 import torch
+import torch.distributed as dist
 from datasets import load_dataset
 from transformers import (
     BitsAndBytesConfig,
@@ -27,7 +28,11 @@ class Trainer:
         self.processor = None
         self.model = None
         self.config = {}
-
+        
+        # Initialize DeepSpeed distributed training early for QLoRA
+        if not dist.is_initialized():
+            deepspeed.init_distributed()
+            
         self._load_config()
 
     def _load_config(self):
@@ -76,21 +81,7 @@ class Trainer:
             target_modules=self.config['lora']['TARGET_MODULES']
         )
 
-    def load_model_and_processor(self):
-        print(f"Loading model: {self.config['model']['BASE_MODEL_ID']}")
-        # Load model
-        model = AutoModelForImageTextToText.from_pretrained(
-            self.config['model']['BASE_MODEL_ID'],
-            quantization_config=self._get_quantization_config(),
-            dtype=torch.bfloat16,
-            trust_remote_code=True,
-            low_cpu_mem_usage=True,
-        )
-
-        print("Model loaded successfully")
-
-        model.config.use_cache = False
-
+    def load_processor(self):
         print(f"Loading processor: {self.config['model']['CHAT_MODEL_ID']}")
         # Load processor
         self.processor = AutoProcessor.from_pretrained(
@@ -99,10 +90,6 @@ class Trainer:
         )
         print("Processor loaded successfully")
 
-        print("Preparing model for k-bit training...")
-        self.model = prepare_model_for_kbit_training(model)
-
-        print("Model configuration completed")
 
     def get_training_args(self):
         """Get training arguments configuration for DeepSpeed"""
@@ -125,6 +112,9 @@ class Trainer:
             save_only_model=True,
             dataloader_pin_memory=False,
             deepspeed=self.ds_config,
+            local_rank=int(os.environ.get('LOCAL_RANK', -1)),
+            ddp_find_unused_parameters=False,
+            report_to=None,  
         )
 
     def train(self):
@@ -138,7 +128,7 @@ class Trainer:
             print("="*50)
 
             print("\n[STEP 1] Loading model and processor...")
-            self.load_model_and_processor()
+            self.load_processor()
             print("✓ Model and processor loaded successfully")
 
             print("\n[STEP 2] Loading dataset...")
@@ -149,17 +139,23 @@ class Trainer:
             dataset = CustomDataset(raw_dataset, self.processor)
             print(f"✓ Custom dataset created with {len(dataset)} samples")
 
-            print("\n[STEP 3] Initializing trainer...")
+            print("\n[STEP 3] Initializing trainer with DeepSpeed...")
             training_args = self.get_training_args()
             print(f"Training args: output_dir={training_args.output_dir}, epochs={training_args.num_train_epochs}")
 
             # Initialize trainer
             trainer = SFTTrainer(
-                model=self.model,
+                model=self.config['model']['BASE_MODEL_ID'],
                 args=training_args,
                 train_dataset=dataset,
                 peft_config=self._get_peft_config(),
                 data_collator=dataset.collate_fn,
+                model_init_kwargs={
+                    "quantization_config": self._get_quantization_config(),
+                    "dtype": torch.bfloat16,
+                    "trust_remote_code": True,
+                    'low_cpu_mem_usage': True,
+                },
             )
             print("✓ Trainer initialized successfully")
 
@@ -209,14 +205,15 @@ class Trainer:
             raise
 
     def run(self):
-        """Run training with DeepSpeed"""
+        """Run training with DeepSpeed and QLoRA"""
         if not torch.cuda.is_available():
             raise RuntimeError("No CUDA devices available")
 
-        # Initialize DeepSpeed distributed training
-        deepspeed.init_distributed()
-
-        print("Starting DeepSpeed training...")
+        print(f"QLoRA + DeepSpeed training initialized")
+        print(f"Number of available GPUs: {torch.cuda.device_count()}")
+        if dist.is_initialized():
+            print(f"Distributed training - World size: {dist.get_world_size()}, Local rank: {dist.get_rank()}")
+        print("Starting DeepSpeed training with QLoRA...")
         self.train()
 
 
