@@ -87,8 +87,9 @@ class Trainer:
             dtype=torch.bfloat16,
             trust_remote_code=True,
             low_cpu_mem_usage=True,
-            use_cache=False,
         )
+
+        model.config.use_cache = False
 
         print("Model loaded successfully")
 
