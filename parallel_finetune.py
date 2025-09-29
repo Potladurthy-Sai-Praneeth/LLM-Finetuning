@@ -184,10 +184,10 @@ class Trainer:
                     param.data = param.data.to(torch.bfloat16)
 
 
-            if trainer.ref_model is not None:
-                fsdp_plugin = trainer.accelerator.state.fsdp_plugin
-                fsdp_plugin.auto_wrap_policy = fsdp_auto_wrap_policy(trainer.ref_model)
-                trainer.ref_model = trainer.accelerator.prepare_model(trainer.ref_model)
+            # if trainer.ref_model is not None:
+            #     fsdp_plugin = trainer.accelerator.state.fsdp_plugin
+            #     fsdp_plugin.auto_wrap_policy = fsdp_auto_wrap_policy(trainer.ref_model)
+            #     trainer.ref_model = trainer.accelerator.prepare_model(trainer.ref_model)
 
             fsdp_plugin = trainer.accelerator.state.fsdp_plugin
             fsdp_plugin.auto_wrap_policy = fsdp_auto_wrap_policy(trainer.model)
