@@ -163,7 +163,7 @@ class Trainer:
 
             raw_dataset = raw_dataset.select(range(2))
             
-            dataset = CustomDataset(raw_dataset, self.processor)
+            dataset = CustomDataset(raw_dataset, self.processor, img_size=(int(self.config['model']['IMG_SIZE'][0]),int(self.config['model']['IMG_SIZE'][1])), max_length=int(self.config['model']['MAX_SEQ_LENGTH']))
             print(f"✓ Custom dataset created with {len(dataset)} samples")
         
             print("\n[STEP 3] Initializing trainer...")
@@ -186,38 +186,9 @@ class Trainer:
                     param.data = param.data.to(torch.bfloat16)
 
 
-            # if trainer.ref_model is not None:
-            #     fsdp_plugin = trainer.accelerator.state.fsdp_plugin
-            #     fsdp_plugin.auto_wrap_policy = fsdp_auto_wrap_policy(trainer.ref_model)
-            #     trainer.ref_model = trainer.accelerator.prepare_model(trainer.ref_model)
-
-            # fsdp_plugin = trainer.accelerator.state.fsdp_plugin
-            # fsdp_plugin.auto_wrap_policy = fsdp_auto_wrap_policy(trainer.model)
-
-            # prepared_model = trainer._wrap_model(
-            #     trainer.model, training=True, dataloader=None
-            # )
-
-            # (
-            #     prepared_model,
-            #     trainer.optimizer,
-            #     trainer.lr_scheduler,
-            # ) = trainer.accelerator.prepare(
-            #     prepared_model, trainer.optimizer, trainer.lr_scheduler
-            # )
-            # trainer.model_wrapped = prepared_model
-            # if trainer.is_fsdp_enabled:
-            #     trainer.model = prepared_model
-
-
-            # trainer.accelerator.prepare_model = lambda model, *args, **kwargs: model
-
             print("\n[STEP 4] Starting training loop...")
             trainer.train()
             print("✓ Training completed successfully")
-
-            # if trainer.is_fsdp_enabled:
-            #     trainer.accelerator.state.fsdp_plugin.set_state_dict_type("FULL_STATE_DICT")
 
             print("\n[STEP 5] Saving the final adapter...")
             adapter_path = os.path.join(self.config['training']['OUTPUT_DIR'], "final_adapter")

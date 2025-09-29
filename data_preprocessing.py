@@ -4,7 +4,7 @@ from PIL import Image
 
 
 class CustomDataset(Dataset):
-    def __init__(self,dataset,processor) -> None:
+    def __init__(self,dataset,processor,img_size=(448,448),max_length=256) -> None:
         super().__init__()
 
         self.dataset = dataset
@@ -13,6 +13,8 @@ class CustomDataset(Dataset):
         self.system_message_content = [{"type": "text", "text": self.system_message}]
 
         self.index_mapping = []
+        self.img_size = img_size
+        self.max_length = max_length
 
         for sample_idx, point in enumerate(self.dataset):
             questions = point['questions']
@@ -52,7 +54,7 @@ class CustomDataset(Dataset):
         question = point['questions'][qa_idx]
         answer = point['answers'][qa_idx]
         image = point['image']        
-        image = image.resize((448, 448))
+        image = image.resize(self.img_size)
         
         return self.format_data(image,question,answer)
     
@@ -98,7 +100,7 @@ class CustomDataset(Dataset):
                 images=list(images), 
                 return_tensors="pt", 
                 padding=True, 
-                max_length=512, 
+                max_length=self.max_length, 
                 truncation=True
             )
         except Exception as e:
