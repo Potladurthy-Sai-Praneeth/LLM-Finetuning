@@ -4,7 +4,7 @@ from PIL import Image
 
 
 class CustomDataset(Dataset):
-    def __init__(self,dataset,processor,img_size=(448,448),max_length=256) -> None:
+    def __init__(self,dataset,processor,img_size=448,max_length=256) -> None:
         super().__init__()
 
         self.dataset = dataset
@@ -13,7 +13,7 @@ class CustomDataset(Dataset):
         self.system_message_content = [{"type": "text", "text": self.system_message}]
 
         self.index_mapping = []
-        self.img_size = int(img_size[0]),int(img_size[1])
+        self.img_size = int(img_size), int(img_size)
         self.max_length = int(max_length)
 
         for sample_idx, point in enumerate(self.dataset):
