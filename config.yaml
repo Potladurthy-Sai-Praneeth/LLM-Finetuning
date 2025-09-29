@@ -4,7 +4,7 @@ environment:
 model:
   BASE_MODEL_ID : "google/gemma-3-4b-pt"
   CHAT_MODEL_ID : "google/gemma-3-4b-it"
-  MAX_SEQ_LENGTH : 256
+  MAX_SEQ_LENGTH : 512
   IMG_SIZE : 224
 
 dataset:
