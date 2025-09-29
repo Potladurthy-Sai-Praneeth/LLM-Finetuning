@@ -37,13 +37,13 @@ fsdp:
   fsdp_backward_prefetch: 'BACKWARD_PRE'
   fsdp_cpu_ram_efficient_loading: True
   fsdp_forward_prefetch: False
-  fsdp_offload_params: True
+  fsdp_offload_params: False
   fsdp_sharding_strategy: 'FULL_SHARD'  
   fsdp_state_dict_type: 'SHARDED_STATE_DICT'
   fsdp_sync_module_states: True
   fsdp_use_orig_params: True
-  fsdp_offload_optimizer: True 
-  fsdp_activation_offload: True
+  fsdp_offload_optimizer: False 
+  fsdp_activation_offload: False
 
 
 
