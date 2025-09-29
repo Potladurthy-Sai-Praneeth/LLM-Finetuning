@@ -81,7 +81,7 @@ class Trainer:
             target_modules=self.config['lora']['TARGET_MODULES']
         )
 
-    def load_processor(self):
+    def load_model_and_processor(self):
         print(f"Loading processor: {self.config['model']['CHAT_MODEL_ID']}")
         # Load processor
         self.processor = AutoProcessor.from_pretrained(
@@ -89,6 +89,28 @@ class Trainer:
             trust_remote_code=True
         )
         print("Processor loaded successfully")
+    
+        """Create model for DeepSpeed with proper device handling"""
+        print(f"Creating model: {self.config['model']['BASE_MODEL_ID']}")
+        
+        # Load model on CPU first to avoid GPU memory issues
+        with deepspeed.zero.Init(config_dict_or_path=self.ds_config):
+            model = AutoModelForImageTextToText.from_pretrained(
+                self.config['model']['BASE_MODEL_ID'],
+                quantization_config=self._get_quantization_config(),
+                torch_dtype=torch.bfloat16,
+                trust_remote_code=True,
+                low_cpu_mem_usage=True,
+            )
+        
+        model.config.use_cache = False
+        print("Model created successfully")
+        
+        # Prepare model for k-bit training
+        print("Preparing model for k-bit training...")
+        model = prepare_model_for_kbit_training(model)
+        print("Model preparation completed")
+        return model
 
 
     def get_training_args(self):
@@ -128,7 +150,7 @@ class Trainer:
             print("="*50)
 
             print("\n[STEP 1] Loading model and processor...")
-            self.load_processor()
+            model = self.load_model_and_processor()
             print("✓ Model and processor loaded successfully")
 
             print("\n[STEP 2] Loading dataset...")
@@ -145,17 +167,11 @@ class Trainer:
 
             # Initialize trainer
             trainer = SFTTrainer(
-                model=self.config['model']['BASE_MODEL_ID'],
+                model=model,
                 args=training_args,
                 train_dataset=dataset,
                 peft_config=self._get_peft_config(),
                 data_collator=dataset.collate_fn,
-                model_init_kwargs={
-                    "quantization_config": self._get_quantization_config(),
-                    "dtype": torch.bfloat16,
-                    "trust_remote_code": True,
-                    'low_cpu_mem_usage': True,
-                },
             )
             print("✓ Trainer initialized successfully")
 
