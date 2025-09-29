@@ -32,8 +32,11 @@ class Trainer:
         # Initialize DeepSpeed distributed training early for QLoRA
         if not dist.is_initialized():
             deepspeed.init_distributed()
-            
+        if torch.cuda.is_available():
+            local_rank = int(os.environ.get("LOCAL_RANK", 0))
+            torch.cuda.set_device(local_rank)
         self._load_config()
+            
 
     def _load_config(self):
         """Load configuration from YAML file"""
@@ -94,13 +97,15 @@ class Trainer:
         print(f"Loading model on CPU: {self.config['model']['BASE_MODEL_ID']}")
         
         # Load model on CPU first to avoid GPU memory issues  
-        with deepspeed.zero.Init(config_dict_or_path=self.ds_config):
-            model = AutoModelForImageTextToText.from_pretrained(
+        local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+        device_map = {"": local_rank} if torch.cuda.is_available() else {"": "cpu"}
+        model = AutoModelForImageTextToText.from_pretrained(
                 self.config['model']['BASE_MODEL_ID'],
                 quantization_config=self._get_quantization_config(),
                 dtype=torch.bfloat16,
                 trust_remote_code=True,
                 low_cpu_mem_usage=True,
+                device_map=device_map,
             )
         
         model.config.use_cache = False
