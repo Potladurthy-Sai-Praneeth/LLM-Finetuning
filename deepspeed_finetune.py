@@ -82,6 +82,7 @@ class Trainer:
         )
 
     def load_model_and_processor(self):
+        """Load processor and create model for DeepSpeed with proper device handling"""
         print(f"Loading processor: {self.config['model']['CHAT_MODEL_ID']}")
         # Load processor
         self.processor = AutoProcessor.from_pretrained(
@@ -89,22 +90,21 @@ class Trainer:
             trust_remote_code=True
         )
         print("Processor loaded successfully")
-    
-        """Create model for DeepSpeed with proper device handling"""
-        print(f"Creating model: {self.config['model']['BASE_MODEL_ID']}")
         
-        # Load model on CPU first to avoid GPU memory issues
-        with deepspeed.zero.Init(config_dict_or_path=self.ds_config):
-            model = AutoModelForImageTextToText.from_pretrained(
-                self.config['model']['BASE_MODEL_ID'],
-                quantization_config=self._get_quantization_config(),
-                torch_dtype=torch.bfloat16,
-                trust_remote_code=True,
-                low_cpu_mem_usage=True,
-            )
+        print(f"Loading model on CPU: {self.config['model']['BASE_MODEL_ID']}")
+        
+        # Load model on CPU first to avoid GPU memory issues  
+        model = AutoModelForImageTextToText.from_pretrained(
+            self.config['model']['BASE_MODEL_ID'],
+            quantization_config=self._get_quantization_config(),
+            torch_dtype=torch.bfloat16,
+            trust_remote_code=True,
+            low_cpu_mem_usage=True,
+            device_map="cpu",  # Load on CPU first
+        )
         
         model.config.use_cache = False
-        print("Model created successfully")
+        print("Model loaded on CPU successfully")
         
         # Prepare model for k-bit training
         print("Preparing model for k-bit training...")
@@ -115,13 +115,13 @@ class Trainer:
 
     def get_training_args(self):
         """Get training arguments configuration for DeepSpeed"""
-        effective_batch_size = int(self.config['training']['BATCH_SIZE']) // int(os.environ.get("WORLD_SIZE", 1))
+        per_device_batch_size = int(self.config['training']['BATCH_SIZE'])
         gradient_accumulation_steps = int(self.config['training']['GRADIENT_ACCUMULATION_STEPS'])
 
         return SFTConfig(
             output_dir=self.config['training']['OUTPUT_DIR'],
             num_train_epochs=int(self.config['training']['NUM_TRAIN_EPOCHS']),
-            per_device_train_batch_size=effective_batch_size,
+            per_device_train_batch_size=per_device_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
             gradient_checkpointing=True,
             gradient_checkpointing_kwargs={"use_reentrant": False},

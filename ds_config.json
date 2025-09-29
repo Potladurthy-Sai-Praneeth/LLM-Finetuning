@@ -27,8 +27,8 @@
   },
   "gradient_clipping": 0.3,
   "steps_per_print": 10,
-  "train_batch_size": "auto",
-  "train_micro_batch_size_per_gpu": "auto",
+  "train_batch_size": 2,
+  "train_micro_batch_size_per_gpu": 1,
   "wall_clock_breakdown": false,
   "optimizer": {
     "type": "AdamW",
