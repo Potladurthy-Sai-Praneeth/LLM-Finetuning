@@ -214,6 +214,9 @@ class Trainer:
             trainer.train()
             print("✓ Training completed successfully")
 
+            # if trainer.is_fsdp_enabled:
+            #     trainer.accelerator.state.fsdp_plugin.set_state_dict_type("FULL_STATE_DICT")
+
             print("\n[STEP 5] Saving the final adapter...")
             adapter_path = os.path.join(self.config['training']['OUTPUT_DIR'], "final_adapter")
             trainer.save_model(adapter_path)
