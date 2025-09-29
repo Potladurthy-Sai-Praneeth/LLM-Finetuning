@@ -125,8 +125,6 @@ class Trainer:
             save_only_model=True,
             dataloader_pin_memory=False,
             deepspeed=self.ds_config,
-            # Disable FSDP since we're using DeepSpeed
-            fsdp=None,
         )
 
     def train(self):
