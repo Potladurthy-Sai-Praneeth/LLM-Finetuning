@@ -17,6 +17,7 @@ from transformers import (
 )
 from peft import LoraConfig, prepare_model_for_kbit_training, PeftModel
 from trl import SFTTrainer, SFTConfig
+import multiprocessing as mp
 import yaml
 import deepspeed
 
@@ -135,9 +136,10 @@ class Trainer:
             bf16=True,
             dataset_text_field='',
             dataset_kwargs={"skip_prepare_dataset": True},
+            dataloader_num_workers=mp.cpu_count(),
             remove_unused_columns=False,
             save_only_model=True,
-            dataloader_pin_memory=False,
+            dataloader_pin_memory=True,
             deepspeed=self.ds_config,
             local_rank=int(os.environ.get('LOCAL_RANK', -1)),
             ddp_find_unused_parameters=False,
