@@ -134,7 +134,7 @@ class Trainer:
             save_only_model=True,
             dataloader_pin_memory=False,
             # Tell the trainer to use FSDP
-            fsdp='full_shard',
+            fsdp='full_shard auto_wrap',
             fsdp_config={
                 'fsdp_transformer_layer_cls_to_wrap': ['Gemma3DecoderLayer'],
                 **self.config['fsdp']
@@ -191,8 +191,8 @@ class Trainer:
             #     fsdp_plugin.auto_wrap_policy = fsdp_auto_wrap_policy(trainer.ref_model)
             #     trainer.ref_model = trainer.accelerator.prepare_model(trainer.ref_model)
 
-            fsdp_plugin = trainer.accelerator.state.fsdp_plugin
-            fsdp_plugin.auto_wrap_policy = fsdp_auto_wrap_policy(trainer.model)
+            # fsdp_plugin = trainer.accelerator.state.fsdp_plugin
+            # fsdp_plugin.auto_wrap_policy = fsdp_auto_wrap_policy(trainer.model)
 
             # prepared_model = trainer._wrap_model(
             #     trainer.model, training=True, dataloader=None
