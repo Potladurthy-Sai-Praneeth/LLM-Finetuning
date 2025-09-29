@@ -161,7 +161,7 @@ class Trainer:
             raw_dataset = load_dataset(self.config['dataset']['DATASET_ID'], split="train")
             print("✓ Raw dataset loaded successfully")
 
-            raw_dataset = raw_dataset.select(range(50))
+            raw_dataset = raw_dataset.select(range(2))
             
             dataset = CustomDataset(raw_dataset, self.processor)
             print(f"✓ Custom dataset created with {len(dataset)} samples")
