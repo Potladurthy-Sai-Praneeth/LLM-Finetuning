@@ -13,8 +13,8 @@ class CustomDataset(Dataset):
         self.system_message_content = [{"type": "text", "text": self.system_message}]
 
         self.index_mapping = []
-        self.img_size = img_size
-        self.max_length = max_length
+        self.img_size = int(img_size[0]),int(img_size[1])
+        self.max_length = int(max_length)
 
         for sample_idx, point in enumerate(self.dataset):
             questions = point['questions']

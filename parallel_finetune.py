@@ -163,7 +163,7 @@ class Trainer:
 
             raw_dataset = raw_dataset.select(range(2))
             
-            dataset = CustomDataset(raw_dataset, self.processor, img_size=(int(self.config['model']['IMG_SIZE'][0]),int(self.config['model']['IMG_SIZE'][1])), max_length=int(self.config['model']['MAX_SEQ_LENGTH']))
+            dataset = CustomDataset(raw_dataset, self.processor, img_size=self.config['model']['IMG_SIZE'], max_length=self.config['model']['MAX_SEQ_LENGTH'])
             print(f"✓ Custom dataset created with {len(dataset)} samples")
         
             print("\n[STEP 3] Initializing trainer...")
