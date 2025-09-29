@@ -94,14 +94,14 @@ class Trainer:
         print(f"Loading model on CPU: {self.config['model']['BASE_MODEL_ID']}")
         
         # Load model on CPU first to avoid GPU memory issues  
-        model = AutoModelForImageTextToText.from_pretrained(
-            self.config['model']['BASE_MODEL_ID'],
-            quantization_config=self._get_quantization_config(),
-            torch_dtype=torch.bfloat16,
-            trust_remote_code=True,
-            low_cpu_mem_usage=True,
-            device_map="cpu",  # Load on CPU first
-        )
+        with deepspeed.zero.Init(config_dict_or_path=self.ds_config):
+            model = AutoModelForImageTextToText.from_pretrained(
+                self.config['model']['BASE_MODEL_ID'],
+                quantization_config=self._get_quantization_config(),
+                dtype=torch.bfloat16,
+                trust_remote_code=True,
+                low_cpu_mem_usage=True,
+            )
         
         model.config.use_cache = False
         print("Model loaded on CPU successfully")
