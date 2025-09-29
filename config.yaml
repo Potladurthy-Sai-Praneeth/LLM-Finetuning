@@ -33,17 +33,17 @@ lora:
   TARGET_MODULES : ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
 
 fsdp:
-  auto_wrap_policy: 'TRANSFORMER_BASED_WRAP'
-  backward_prefetch: 'BACKWARD_PRE'
-  cpu_ram_efficient_loading: True
-  forward_prefetch: False
-  offload_params: True
-  sharding_strategy: 'FULL_SHARD'  
-  state_dict_type: 'SHARDED_STATE_DICT'
-  sync_module_states: True
-  use_orig_params: True
-  offload_optimizer: True 
-  activation_offload: True
+  fsdp_auto_wrap_policy: 'TRANSFORMER_BASED_WRAP'
+  fsdp_backward_prefetch: 'BACKWARD_PRE'
+  fsdp_cpu_ram_efficient_loading: True
+  fsdp_forward_prefetch: False
+  fsdp_offload_params: True
+  fsdp_sharding_strategy: 'FULL_SHARD'  
+  fsdp_state_dict_type: 'SHARDED_STATE_DICT'
+  fsdp_sync_module_states: True
+  fsdp_use_orig_params: True
+  fsdp_offload_optimizer: True 
+  fsdp_activation_offload: True
 
 
 

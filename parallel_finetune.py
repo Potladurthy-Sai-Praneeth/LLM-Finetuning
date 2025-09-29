@@ -15,6 +15,7 @@ from transformers import (
     AutoModelForImageTextToText,
 )
 from peft import LoraConfig, prepare_model_for_kbit_training, PeftModel
+from peft.utils.other import fsdp_auto_wrap_policy
 from trl import SFTTrainer, SFTConfig
 import yaml
 from torch.distributed.fsdp.wrap import lambda_auto_wrap_policy
@@ -86,11 +87,14 @@ class Trainer:
             dtype=torch.bfloat16,
             trust_remote_code=True,
             low_cpu_mem_usage=True,
+            use_cache=False,
         )
 
         print("Model loaded successfully")
 
-        model.config.use_cache = False
+        for name, param in model.named_parameters():
+            param.requires_grad = False
+
 
         print(f"Loading processor: {self.config['model']['CHAT_MODEL_ID']}")
         # Load processor
@@ -129,7 +133,7 @@ class Trainer:
             save_only_model=True,
             dataloader_pin_memory=False,
             # Tell the trainer to use FSDP
-            fsdp='full_shard',
+            fsdp='full_shard auto_wrap offload',
             fsdp_config={
                 'fsdp_transformer_layer_cls_to_wrap': [Gemma3DecoderLayer],
                 **self.config['fsdp']
@@ -164,7 +168,8 @@ class Trainer:
             print(f"Training args: output_dir={training_args.output_dir}, epochs={training_args.num_train_epochs}")
             
             # Initialize trainer
-            trainer = CustomSFTTrainer(
+            # trainer = CustomSFTTrainer(
+            trainer = SFTTrainer(
                 model=self.model,
                 args=training_args,
                 train_dataset=dataset,
@@ -172,6 +177,37 @@ class Trainer:
                 data_collator=dataset.collate_fn,
             )
             print("✓ Trainer initialized successfully")
+
+            for name, param in trainer.model.named_parameters():
+                if (param.dtype == torch.float32):
+                    param.data = param.data.to(torch.bfloat16)
+
+
+            if trainer.ref_model is not None:
+                fsdp_plugin = trainer.accelerator.state.fsdp_plugin
+                fsdp_plugin.auto_wrap_policy = fsdp_auto_wrap_policy(trainer.ref_model)
+                trainer.ref_model = trainer.accelerator.prepare_model(trainer.ref_model)
+
+            fsdp_plugin = trainer.accelerator.state.fsdp_plugin
+            fsdp_plugin.auto_wrap_policy = fsdp_auto_wrap_policy(trainer.model)
+
+            # prepared_model = trainer._wrap_model(
+            #     trainer.model, training=True, dataloader=None
+            # )
+
+            # (
+            #     prepared_model,
+            #     trainer.optimizer,
+            #     trainer.lr_scheduler,
+            # ) = trainer.accelerator.prepare(
+            #     prepared_model, trainer.optimizer, trainer.lr_scheduler
+            # )
+            # trainer.model_wrapped = prepared_model
+            # if trainer.is_fsdp_enabled:
+            #     trainer.model = prepared_model
+
+
+            # trainer.accelerator.prepare_model = lambda model, *args, **kwargs: model
 
             print("\n[STEP 4] Starting training loop...")
             trainer.train()
