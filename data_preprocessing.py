@@ -143,24 +143,3 @@ class CustomDataset(Dataset):
 #             processed_data.append(formatted_sample)
     
 #     return processed_data
-
-
-
-
-
-# if __name__ == "__main__":
-#     load_dotenv()
-#     DATASET_ID = os.getenv("DATASET_ID")
-    
-#     print(f"Loading dataset: {DATASET_ID}")
-#     dataset = load_dataset(DATASET_ID, split="train")
-#     dataset = dataset.select(50)
-
-#     print(f"Dataset loaded with {len(dataset)} samples")
-
-#     processed_data = process_dataset(dataset)
-
-#     print(f"Processed {len(processed_data)} samples.")
-#     print("Sample processed data:")
-#     print(processed_data[0])
-

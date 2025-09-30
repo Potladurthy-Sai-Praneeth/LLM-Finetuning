@@ -165,7 +165,7 @@ class Trainer:
             raw_dataset = load_dataset(self.config['dataset']['DATASET_ID'], split="train")
             print("✓ Raw dataset loaded successfully")
 
-            dataset = CustomDataset(raw_dataset, self.processor)
+            dataset = CustomDataset(raw_dataset, self.processor, img_size=self.config['model']['IMG_SIZE'], max_length=self.config['model']['MAX_SEQ_LENGTH'])
             print(f"✓ Custom dataset created with {len(dataset)} samples")
 
             print("\n[STEP 3] Initializing trainer with DeepSpeed...")

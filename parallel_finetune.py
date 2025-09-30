@@ -3,7 +3,6 @@ from pathlib import Path
 import traceback
 import sys
 
-
 from data_preprocessing import CustomDataset
 from inference import get_merged_model
 
@@ -22,12 +21,12 @@ from torch.distributed.fsdp.wrap import lambda_auto_wrap_policy
 from transformers.models.gemma3.modeling_gemma3 import Gemma3DecoderLayer, Gemma3RMSNorm
 from typing import Callable
 
-class CustomSFTTrainer(SFTTrainer):
-    def _fsdp_qlora_plugin_updates(self):
-        def custom_policy(module, recurse, nonwrapped_numel) -> bool:
-            return isinstance(module, Gemma3DecoderLayer)
+# class CustomSFTTrainer(SFTTrainer):
+#     def _fsdp_qlora_plugin_updates(self):
+#         def custom_policy(module, recurse, nonwrapped_numel) -> bool:
+#             return isinstance(module, Gemma3DecoderLayer)
         
-        self.accelerator.state.fsdp_plugin.auto_wrap_policy = custom_policy
+#         self.accelerator.state.fsdp_plugin.auto_wrap_policy = custom_policy
 
 
 class Trainer:
@@ -161,7 +160,7 @@ class Trainer:
             raw_dataset = load_dataset(self.config['dataset']['DATASET_ID'], split="train")
             print("✓ Raw dataset loaded successfully")
 
-            raw_dataset = raw_dataset.select(range(2))
+            # raw_dataset = raw_dataset.select(range(2))
             
             dataset = CustomDataset(raw_dataset, self.processor, img_size=self.config['model']['IMG_SIZE'], max_length=self.config['model']['MAX_SEQ_LENGTH'])
             print(f"✓ Custom dataset created with {len(dataset)} samples")
@@ -171,7 +170,6 @@ class Trainer:
             print(f"Training args: output_dir={training_args.output_dir}, epochs={training_args.num_train_epochs}")
             
             # Initialize trainer
-            # trainer = CustomSFTTrainer(
             trainer = SFTTrainer(
                 model=self.model,
                 args=training_args,
