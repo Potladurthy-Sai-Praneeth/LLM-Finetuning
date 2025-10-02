@@ -120,8 +120,8 @@ class Trainer:
             num_train_epochs=int(self.config['training']['NUM_TRAIN_EPOCHS']),
             per_device_train_batch_size=effective_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
-            gradient_checkpointing=True,
-            gradient_checkpointing_kwargs = {"use_reentrant": True},
+            # gradient_checkpointing=True,
+            gradient_checkpointing_kwargs = {"use_reentrant": False},
             optim="adamw_torch_fused",
             logging_steps=int(self.config['training']['LOGGING_STEPS']),
             save_strategy="epoch",
@@ -137,6 +137,7 @@ class Trainer:
             fsdp='full_shard auto_wrap',
             fsdp_config={
                 'fsdp_transformer_layer_cls_to_wrap': ['Gemma3DecoderLayer'],
+                'fsdp_activation_checkpointing': True,
                 **self.config['fsdp']
             }
         )

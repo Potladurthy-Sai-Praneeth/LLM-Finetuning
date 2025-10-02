@@ -42,7 +42,7 @@ fsdp:
   fsdp_sharding_strategy: 'FULL_SHARD'  
   fsdp_state_dict_type: 'SHARDED_STATE_DICT'
   fsdp_sync_module_states: True
-  fsdp_use_orig_params: True
+  fsdp_use_orig_params: False
   fsdp_offload_optimizer: True 
   fsdp_activation_offload: True
 
