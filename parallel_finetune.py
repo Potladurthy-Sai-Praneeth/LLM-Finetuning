@@ -32,6 +32,7 @@ from typing import Callable
 class Trainer:
     """Handles FSDP training setup and execution"""
     
+    
     def __init__(self):
         self.processor = None
         self.model = None
@@ -120,7 +121,7 @@ class Trainer:
             per_device_train_batch_size=effective_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
             gradient_checkpointing=True,
-            gradient_checkpointing_kwargs = {"use_reentrant": False},
+            gradient_checkpointing_kwargs = {"use_reentrant": True},
             optim="adamw_torch_fused",
             logging_steps=int(self.config['training']['LOGGING_STEPS']),
             save_strategy="epoch",
