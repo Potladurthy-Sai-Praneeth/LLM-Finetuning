@@ -134,7 +134,7 @@ class Trainer:
             save_only_model=True,
             dataloader_pin_memory=False,
             # Tell the trainer to use FSDP
-            fsdp='full_shard auto_wrap',
+            fsdp='full_shard',
             fsdp_config={
                 'fsdp_transformer_layer_cls_to_wrap': ['Gemma3DecoderLayer'],
                 'fsdp_activation_checkpointing': True,
