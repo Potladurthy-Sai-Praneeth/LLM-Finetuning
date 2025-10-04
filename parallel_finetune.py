@@ -106,7 +106,8 @@ class Trainer:
         print("Processor loaded successfully")
 
         print("Preparing model for k-bit training...")
-        self.model = prepare_model_for_kbit_training(model)
+        # self.model = prepare_model_for_kbit_training(model)
+        self.model = model
 
         print("Model configuration completed")
 
@@ -137,7 +138,7 @@ class Trainer:
             fsdp='full_shard auto_wrap',
             fsdp_config={
                 'fsdp_transformer_layer_cls_to_wrap': ['Gemma3DecoderLayer'],
-                'fsdp_activation_checkpointing': True,
+                'fsdp_activation_checkpointing': False,
                 **self.config['fsdp']
             }
         )
