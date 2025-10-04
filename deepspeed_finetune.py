@@ -114,7 +114,7 @@ class Trainer:
         
         # Prepare model for k-bit training
         print("Preparing model for k-bit training...")
-        model = prepare_model_for_kbit_training(model)
+        # model = prepare_model_for_kbit_training(model)
         print("Model preparation completed")
         return model
 
