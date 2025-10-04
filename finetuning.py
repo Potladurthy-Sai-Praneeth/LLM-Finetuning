@@ -98,7 +98,8 @@ class Trainer:
         print("Processor loaded successfully")
 
         print("Preparing model for k-bit training...")
-        self.model = prepare_model_for_kbit_training(model)
+        # self.model = prepare_model_for_kbit_training(model)
+        self.model = model
 
         print("Model configuration completed")
 
@@ -112,7 +113,7 @@ class Trainer:
             num_train_epochs=int(self.config['training']['NUM_TRAIN_EPOCHS']),
             per_device_train_batch_size=effective_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
-            gradient_checkpointing=True,
+            # gradient_checkpointing=True,
             gradient_checkpointing_kwargs = {"use_reentrant": False},
             optim="adamw_torch_fused",
             logging_steps=int(self.config['training']['LOGGING_STEPS']),
@@ -184,7 +185,7 @@ class Trainer:
 
                 base_model = AutoModelForImageTextToText.from_pretrained(
                     self.config['model']['BASE_MODEL_ID'],
-                    torch_dtype=torch.bfloat16,
+                    dtype=torch.bfloat16,
                     trust_remote_code=True
                 )
 
