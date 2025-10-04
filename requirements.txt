@@ -1,4 +1,4 @@
-transformers  # transformers==4.49.0 works without excessive memory
+transformers==4.49.0  # transformers==4.49.0 works without excessive memory
 peft
 accelerate
 trl
