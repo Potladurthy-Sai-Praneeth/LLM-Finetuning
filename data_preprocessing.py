@@ -106,7 +106,8 @@ class CustomDataset(Dataset):
                 return_tensors="pt", 
                 padding=True, 
                 max_length=self.max_length, 
-                truncation=True
+                truncation=True,
+                use_fast=True
             )
         except Exception as e:
             # if self.rank == 0:
