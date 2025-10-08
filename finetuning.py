@@ -109,7 +109,7 @@ class Trainer:
         gradient_accumulation_steps = int(self.config['training']['GRADIENT_ACCUMULATION_STEPS'])
 
         return SFTConfig(
-            use_liger_kernel=True,
+            # use_liger_kernel=True,
             output_dir=self.config['training']['OUTPUT_DIR'],
             num_train_epochs=int(self.config['training']['NUM_TRAIN_EPOCHS']),
             per_device_train_batch_size=effective_batch_size,
