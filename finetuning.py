@@ -98,8 +98,8 @@ class Trainer:
         print("Processor loaded successfully")
 
         print("Preparing model for k-bit training...")
-        # self.model = prepare_model_for_kbit_training(model)
-        self.model = model
+        self.model = prepare_model_for_kbit_training(model)
+        # self.model = model
 
         print("Model configuration completed")
 
@@ -109,6 +109,7 @@ class Trainer:
         gradient_accumulation_steps = int(self.config['training']['GRADIENT_ACCUMULATION_STEPS'])
 
         return SFTConfig(
+            use_liger_kernel=True,
             output_dir=self.config['training']['OUTPUT_DIR'],
             num_train_epochs=int(self.config['training']['NUM_TRAIN_EPOCHS']),
             per_device_train_batch_size=effective_batch_size,

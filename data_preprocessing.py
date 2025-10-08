@@ -1,6 +1,7 @@
 import os
 from torch.utils.data import Dataset
 from PIL import Image
+import torch
 
 
 class CustomDataset(Dataset):
@@ -63,7 +64,6 @@ class CustomDataset(Dataset):
         if self.processor is None:
             raise ValueError("Processor not initialized")
 
-        # Pre-extract all valid samples to avoid multiple iterations
         valid_samples = []
         for example in batch:
             user_message = next(
@@ -89,7 +89,12 @@ class CustomDataset(Dataset):
             valid_samples.append((chat_text.strip(), image_content["image"]))
 
         if not valid_samples:
-            return {}
+            # Return a properly formatted empty batch instead of empty dict
+            return {
+                "input_ids": torch.tensor([], dtype=torch.long),
+                "attention_mask": torch.tensor([], dtype=torch.long),
+                "labels": torch.tensor([], dtype=torch.long)
+            }
 
         # Batch process all valid samples at once
         texts, images = zip(*valid_samples)
@@ -106,17 +111,29 @@ class CustomDataset(Dataset):
         except Exception as e:
             # if self.rank == 0:
             print(f"Warning: Batch processing failed: {e}")
-            return {}
+            return {
+                "input_ids": torch.tensor([], dtype=torch.long),
+                "attention_mask": torch.tensor([], dtype=torch.long),
+                "labels": torch.tensor([], dtype=torch.long)
+            }
 
-        # Create labels efficiently using in-place operations where possible
         labels = inputs["input_ids"].clone()
-        image_token_id = [self.processor.tokenizer.convert_tokens_to_ids(self.processor.tokenizer.special_tokens_map["boi_token"])]
-        image_token_mask = (labels == image_token_id)
-        pad_token_mask = (labels == self.processor.tokenizer.pad_token_id)
-        # attention_mask_zero = (inputs['attention_mask'] == 0)
-        special_token_mask = (labels == 262144)
         
-        labels[pad_token_mask | image_token_mask | special_token_mask] = -100
+        # Get image token ID once and reuse
+        image_token_id = self.processor.tokenizer.convert_tokens_to_ids(
+            self.processor.tokenizer.special_tokens_map["boi_token"]
+        )
+
+        mask = (
+            (labels == self.processor.tokenizer.pad_token_id) |
+            (labels == image_token_id) |
+            (labels == 262144)
+        )
+        
+        labels.masked_fill_(mask, -100)
+        
+        del mask
+        
         inputs['labels'] = labels
         
         return inputs
