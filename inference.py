@@ -41,7 +41,7 @@ def get_merged_model(base_model_id: str, adapter_path: str, output_path: str):
     print(f"Loading base model: {base_model_id}")
     base_model = AutoModelForImageTextToText.from_pretrained(
         base_model_id,
-        torch_dtype=torch.bfloat16,
+        torch_dtype=torch.float16,
         device_map="auto",
         trust_remote_code=True
     )
@@ -80,7 +80,7 @@ def load_model_for_inference(model_path: str, is_base_model: bool = False):
     
     model = AutoModelForImageTextToText.from_pretrained(
         model_path,
-        torch_dtype=torch.bfloat16,
+        torch_dtype=torch.float16,
         device_map="auto",
         trust_remote_code=True
     )

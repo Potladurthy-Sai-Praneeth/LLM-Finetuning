@@ -53,8 +53,8 @@ class Trainer:
             load_in_4bit=True,
             bnb_4bit_use_double_quant=True,
             bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.bfloat16,
-            bnb_4bit_quant_storage=torch.bfloat16,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_quant_storage=torch.float16,
         )
     
     def _get_peft_config(self):
@@ -75,7 +75,7 @@ class Trainer:
         model = AutoModelForImageTextToText.from_pretrained(
             self.config['model']['BASE_MODEL_ID'],
             quantization_config=self._get_quantization_config(),
-            dtype=torch.bfloat16,
+            dtype=torch.float16,
             trust_remote_code=True,
             low_cpu_mem_usage=True,
             device_map="auto",
@@ -120,7 +120,7 @@ class Trainer:
             logging_steps=int(self.config['training']['LOGGING_STEPS']),
             save_strategy="epoch",
             learning_rate=float(self.config['training']['LEARNING_RATE']),
-            bf16=True,
+            fp16=True,
             lr_scheduler_type="cosine",
             dataset_text_field='',
             dataset_kwargs={"skip_prepare_dataset": True},
@@ -169,7 +169,7 @@ class Trainer:
 
             for name, param in trainer.model.named_parameters():
                 if (param.dtype == torch.float32):
-                    param.data = param.data.to(torch.bfloat16)
+                    param.data = param.data.to(torch.float16)
 
 
             print("\n[STEP 4] Starting training loop...")
@@ -186,7 +186,7 @@ class Trainer:
 
                 base_model = AutoModelForImageTextToText.from_pretrained(
                     self.config['model']['BASE_MODEL_ID'],
-                    dtype=torch.bfloat16,
+                    dtype=torch.float16,
                     trust_remote_code=True
                 )
 
