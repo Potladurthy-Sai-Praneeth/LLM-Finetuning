@@ -106,8 +106,7 @@ class CustomDataset(Dataset):
                 return_tensors="pt", 
                 padding=True, 
                 max_length=self.max_length, 
-                truncation=True,
-                use_fast=True
+                truncation=True
             )
         except Exception as e:
             # if self.rank == 0:
@@ -131,7 +130,8 @@ class CustomDataset(Dataset):
             (labels == image_token_id) |
             (labels == 262144)
         )
-        labels = torch.where(mask, torch.tensor(-100, dtype=labels.dtype), labels)
+        # labels = torch.where(mask, torch.tensor(-100, dtype=labels.dtype), labels)
+        labels[mask] = -100
         del mask
         
         inputs['labels'] = labels
