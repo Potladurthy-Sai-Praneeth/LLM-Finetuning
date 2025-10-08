@@ -124,14 +124,13 @@ class CustomDataset(Dataset):
             self.processor.tokenizer.special_tokens_map["boi_token"]
         )
 
+        # Create combined mask for tokens to ignore in loss computation
         mask = (
             (labels == self.processor.tokenizer.pad_token_id) |
             (labels == image_token_id) |
             (labels == 262144)
         )
-        
-        labels.masked_fill_(mask, -100)
-        
+        labels = torch.where(mask, torch.tensor(-100, dtype=labels.dtype), labels)
         del mask
         
         inputs['labels'] = labels
