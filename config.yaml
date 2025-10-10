@@ -2,8 +2,8 @@ environment:
   HF_HUB_ENABLE_HF_TRANSFER : "1" 
 
 model:
-  BASE_MODEL_ID : "google/gemma-3-1b-pt"
-  CHAT_MODEL_ID : "google/gemma-3-1b-it"
+  BASE_MODEL_ID : "google/gemma-3-4b-pt"
+  CHAT_MODEL_ID : "google/gemma-3-4b-it"
   MAX_SEQ_LENGTH : 512
   IMG_SIZE : 448
 
