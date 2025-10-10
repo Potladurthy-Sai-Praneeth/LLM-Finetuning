@@ -18,6 +18,7 @@ from transformers import (
 from peft import LoraConfig, prepare_model_for_kbit_training, PeftModel
 from trl import SFTTrainer, SFTConfig
 import multiprocessing as mp
+from transformers import PaliGemmaProcessor, PaliGemmaForConditionalGeneration
 import yaml
 import deepspeed
 
@@ -100,7 +101,8 @@ class Trainer:
         # Load model on CPU first to avoid GPU memory issues  
         local_rank = int(os.environ.get("LOCAL_RANK", "0"))
         device_map = {"": local_rank} if torch.cuda.is_available() else {"": "cpu"}
-        model = AutoModelForImageTextToText.from_pretrained(
+        # model = AutoModelForImageTextToText.from_pretrained(
+        model = PaliGemmaForConditionalGeneration.from_pretrained(
                 self.config['model']['BASE_MODEL_ID'],
                 quantization_config=self._get_quantization_config(),
                 dtype=torch.bfloat16,
@@ -164,6 +166,7 @@ class Trainer:
             print("\n[STEP 2] Loading dataset...")
             print(f"Dataset ID: {self.config['dataset']['DATASET_ID']}")
             raw_dataset = load_dataset(self.config['dataset']['DATASET_ID'], split="train")
+            raw_dataset = raw_dataset.select(self.config['dataset'].get('NUM_SAMPLES', 100))
             print("✓ Raw dataset loaded successfully")
 
             dataset = CustomDataset(raw_dataset, self.processor, img_size=self.config['model']['IMG_SIZE'], max_length=self.config['model']['MAX_SEQ_LENGTH'])

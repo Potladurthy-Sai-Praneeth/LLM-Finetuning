@@ -18,6 +18,7 @@ from peft import LoraConfig, prepare_model_for_kbit_training, PeftModel
 from trl import SFTTrainer, SFTConfig
 import yaml
 from transformers.models.gemma3.modeling_gemma3 import Gemma3DecoderLayer, Gemma3RMSNorm
+from transformers import PaliGemmaProcessor, PaliGemmaForConditionalGeneration
 from typing import Callable
 
 
@@ -72,7 +73,8 @@ class Trainer:
     def load_model_and_processor(self):
         print(f"Loading model: {self.config['model']['BASE_MODEL_ID']}")
         # Load model
-        model = AutoModelForImageTextToText.from_pretrained(
+        # model = AutoModelForImageTextToText.from_pretrained(
+        model = PaliGemmaForConditionalGeneration.from_pretrained(
             self.config['model']['BASE_MODEL_ID'],
             quantization_config=self._get_quantization_config(),
             dtype=torch.bfloat16,
@@ -147,6 +149,7 @@ class Trainer:
             print("\n[STEP 2] Loading dataset...")
             print(f"Dataset ID: {self.config['dataset']['DATASET_ID']}")
             raw_dataset = load_dataset(self.config['dataset']['DATASET_ID'], split="train")
+            raw_dataset = raw_dataset.select(self.config['dataset'].get('NUM_SAMPLES', 100))
             print("✓ Raw dataset loaded successfully")
 
             
