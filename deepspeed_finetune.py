@@ -101,8 +101,8 @@ class Trainer:
         # Load model on CPU first to avoid GPU memory issues  
         local_rank = int(os.environ.get("LOCAL_RANK", "0"))
         device_map = {"": local_rank} if torch.cuda.is_available() else {"": "cpu"}
-        # model = AutoModelForImageTextToText.from_pretrained(
-        model = PaliGemmaForConditionalGeneration.from_pretrained(
+        model = AutoModelForImageTextToText.from_pretrained(
+        # model = PaliGemmaForConditionalGeneration.from_pretrained(
                 self.config['model']['BASE_MODEL_ID'],
                 quantization_config=self._get_quantization_config(),
                 dtype=torch.bfloat16,

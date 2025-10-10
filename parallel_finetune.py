@@ -83,8 +83,8 @@ class Trainer:
     def load_model_and_processor(self):
         print(f"Loading model: {self.config['model']['BASE_MODEL_ID']}")
         # Load model
-        # model = AutoModelForImageTextToText.from_pretrained(
-        model = PaliGemmaForConditionalGeneration.from_pretrained(
+        model = AutoModelForImageTextToText.from_pretrained(
+        # model = PaliGemmaForConditionalGeneration.from_pretrained(
             self.config['model']['BASE_MODEL_ID'],
             quantization_config=self._get_quantization_config(),
             dtype=torch.bfloat16,
@@ -142,8 +142,8 @@ class Trainer:
             # Tell the trainer to use FSDP
             fsdp='full_shard auto_wrap',
             fsdp_config={
-                # 'fsdp_transformer_layer_cls_to_wrap': ['Gemma3DecoderLayer'],
-                'fsdp_transformer_layer_cls_to_wrap': ['PaliGemmaModel'],
+                'fsdp_transformer_layer_cls_to_wrap': ['Gemma3DecoderLayer'],
+                # 'fsdp_transformer_layer_cls_to_wrap': ['PaliGemmaModel'],
                 'fsdp_activation_checkpointing': False,
                 **self.config['fsdp']
             }
