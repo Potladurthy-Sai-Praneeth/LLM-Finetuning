@@ -2,10 +2,15 @@ environment:
   HF_HUB_ENABLE_HF_TRANSFER : "1" 
 
 model:
-  BASE_MODEL_ID : "google/gemma-3-4b-pt"
-  CHAT_MODEL_ID : "google/gemma-3-4b-it"
+  # BASE_MODEL_ID : "google/gemma-3-4b-pt"
+  # CHAT_MODEL_ID : "google/gemma-3-4b-it"
+  # MAX_SEQ_LENGTH : 512
+  # IMG_SIZE : 448
+
+  BASE_MODEL_ID : "google/paligemma-3b-pt-224"  
+  CHAT_MODEL_ID : "google/paligemma-3b-pt-224"  
   MAX_SEQ_LENGTH : 512
-  IMG_SIZE : 448
+  IMG_SIZE : 224  
 
 dataset:
   DATASET_ID : "mmoukouba/MedPix-Grouped-QA"
@@ -30,8 +35,10 @@ lora:
   LORA_ALPHA : 16
   LORA_DROPOUT : 0.05
   TASK_TYPE : "CAUSAL_LM"
-  MODULES_TO_SAVE : ["lm_head", "embed_tokens"]
-  TARGET_MODULES : ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+  # MODULES_TO_SAVE : ["lm_head", "embed_tokens"]
+  MODULES_TO_SAVE : []
+  # TARGET_MODULES : ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+  TARGET_MODULES : ["q_proj", "k_proj", "v_proj"]
 
 fsdp:
   fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP

@@ -19,7 +19,9 @@ from trl import SFTTrainer, SFTConfig
 import yaml
 from torch.distributed.fsdp.wrap import lambda_auto_wrap_policy
 from transformers.models.gemma3.modeling_gemma3 import Gemma3DecoderLayer, Gemma3RMSNorm
+from transformers.models.paligemma.modeling_paligemma import PaliGemmaModel
 from typing import Callable
+from transformers import PaliGemmaProcessor, PaliGemmaForConditionalGeneration
 
 # class CustomSFTTrainer(SFTTrainer):
 #     def _fsdp_qlora_plugin_updates(self):
@@ -81,7 +83,8 @@ class Trainer:
     def load_model_and_processor(self):
         print(f"Loading model: {self.config['model']['BASE_MODEL_ID']}")
         # Load model
-        model = AutoModelForImageTextToText.from_pretrained(
+        # model = AutoModelForImageTextToText.from_pretrained(
+        model = PaliGemmaForConditionalGeneration.from_pretrained(
             self.config['model']['BASE_MODEL_ID'],
             quantization_config=self._get_quantization_config(),
             dtype=torch.bfloat16,
@@ -101,7 +104,8 @@ class Trainer:
         # Load processor
         self.processor = AutoProcessor.from_pretrained(
             self.config['model']['CHAT_MODEL_ID'],
-            trust_remote_code=True
+            trust_remote_code=True,
+            use_fast=True
         )
         print("Processor loaded successfully")
 
@@ -138,7 +142,8 @@ class Trainer:
             # Tell the trainer to use FSDP
             fsdp='full_shard auto_wrap',
             fsdp_config={
-                'fsdp_transformer_layer_cls_to_wrap': ['Gemma3DecoderLayer'],
+                # 'fsdp_transformer_layer_cls_to_wrap': ['Gemma3DecoderLayer'],
+                'fsdp_transformer_layer_cls_to_wrap': ['PaliGemmaModel'],
                 'fsdp_activation_checkpointing': False,
                 **self.config['fsdp']
             }
