@@ -2,6 +2,7 @@ import os
 from torch.utils.data import Dataset
 from PIL import Image
 import torch
+import numpy as np
 
 
 class CustomDataset(Dataset):
@@ -148,7 +149,7 @@ class CustomDataset(Dataset):
         # PaliGemma format: <image> question\nanswer
         return {
             "image": image,
-            "text": f"{question}\n{answer}"  # Simple concatenation
+            "text": f"<image> {question}\n{answer}"
         }
 
     def collate_fn(self, batch):
@@ -157,23 +158,34 @@ class CustomDataset(Dataset):
 
         images = []
         texts = []
-        
+
         for example in batch:
-            if example.get("image") is None:
+            img = example.get("image", None)
+            if img is None:
                 print("Warning: Skipping sample with missing image")
                 continue
-                
-            images.append(example["image"])
-            texts.append(example["text"])
-        
+
+            if isinstance(img, str):
+                img = Image.open(img).convert("RGB")
+            elif isinstance(img, np.ndarray):
+                img = Image.fromarray(img)
+            elif not isinstance(img, Image.Image):
+                raise ValueError(f"Unsupported image type: {type(img)}")
+
+            images.append(img)
+            
+            text = example["text"]
+            if "<image>" not in text:
+                text = "<image> " + text
+            texts.append(text)
+
         if not images:
             return {
                 "input_ids": torch.tensor([], dtype=torch.long),
                 "attention_mask": torch.tensor([], dtype=torch.long),
                 "labels": torch.tensor([], dtype=torch.long)
             }
-        
-        # PaliGemma processor handles image tokenization differently
+
         inputs = self.processor(
             images=images,
             text=texts,
@@ -182,12 +194,11 @@ class CustomDataset(Dataset):
             truncation=True,
             max_length=self.max_length
         )
-        
-        # For PaliGemma, mask only padding tokens
+
         labels = inputs["input_ids"].clone()
         labels[labels == self.processor.tokenizer.pad_token_id] = -100
-        
-        inputs['labels'] = labels
+        inputs["labels"] = labels
+
         return inputs
 
 
