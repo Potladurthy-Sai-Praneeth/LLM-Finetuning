@@ -31,7 +31,16 @@ class CustomDataset(Dataset):
         point = self.dataset[sample_idx]
         question = point['questions'][qa_idx]
         answer = point['answers'][qa_idx]
-        image = point['image']        
+        image = point['image']
+        
+        # Ensure image is PIL Image and in RGB mode
+        if isinstance(image, str):
+            image = Image.open(image).convert("RGB")
+        elif isinstance(image, np.ndarray):
+            image = Image.fromarray(image).convert("RGB")
+        elif isinstance(image, Image.Image):
+            image = image.convert("RGB")
+        
         image = image.resize(self.img_size)
         
         return self.format_data(image,question,answer)
@@ -165,12 +174,10 @@ class CustomDataset(Dataset):
                 print("Warning: Skipping sample with missing image")
                 continue
 
-            if isinstance(img, str):
-                img = Image.open(img).convert("RGB")
-            elif isinstance(img, np.ndarray):
-                img = Image.fromarray(img)
-            elif not isinstance(img, Image.Image):
-                raise ValueError(f"Unsupported image type: {type(img)}")
+            # Image is already processed in __getitem__ as RGB PIL Image
+            if not isinstance(img, Image.Image):
+                print(f"Warning: Unexpected image type {type(img)}, skipping")
+                continue
 
             images.append(img)
             
