@@ -187,18 +187,21 @@ class DistributedTrainer:
             num_train_epochs=int(self.config['training']['NUM_TRAIN_EPOCHS']),
             per_device_train_batch_size=per_device_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
+            gradient_checkpointing=True,
             gradient_checkpointing_kwargs={"use_reentrant": False},
             optim="adamw_torch_fused",
             logging_steps=int(self.config['training']['LOGGING_STEPS']),
             save_strategy="epoch",
             learning_rate=float(self.config['training']['LEARNING_RATE']),
             bf16=True,
+            tf32=True,  # Enable TF32 for better performance on Ampere GPUs
             lr_scheduler_type="cosine",
             dataset_text_field='',
             dataset_kwargs={"skip_prepare_dataset": True},
             remove_unused_columns=False,
             save_only_model=True,
             dataloader_pin_memory=False,
+            dataloader_num_workers=0,  # Avoid multiprocessing issues with images
             # FSDP configuration for distributed training
             fsdp='full_shard auto_wrap' if self.world_size > 1 else '',
             fsdp_config={
@@ -266,9 +269,19 @@ class DistributedTrainer:
                     param.data = param.data.to(torch.bfloat16)
 
             self.print_rank0("\n[STEP 4] Starting training loop...")
+            
+            # Clear CUDA cache before training
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+            
             trainer.train()
             self.print_rank0("✓ Training completed successfully")
 
+            # Synchronize before saving
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            
             self.print_rank0("\n[STEP 5] Saving the final adapter...")
             adapter_path = os.path.join(
                 self.config['training']['OUTPUT_DIR'], 
@@ -331,6 +344,10 @@ def main():
     This can be run directly or launched with torchrun/Vertex AI.
     """
     try:
+        # Set environment variables for better CUDA error handling
+        os.environ['CUDA_LAUNCH_BLOCKING'] = '1'  # Synchronous CUDA calls for better error traces
+        os.environ['TORCH_USE_CUDA_DSA'] = '1'     # Device-side assertions
+        
         # Initialize distributed training
         is_distributed = setup_distributed()
         

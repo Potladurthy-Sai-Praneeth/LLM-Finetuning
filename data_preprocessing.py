@@ -108,7 +108,7 @@ class CustomDataset(Dataset):
         # Process samples individually to avoid batch size mismatch
         all_input_ids = []
         all_attention_masks = []
-        all_labels = []
+        all_pixel_values = []
         
         for messages, image in valid_samples:
             try:
@@ -130,6 +130,10 @@ class CustomDataset(Dataset):
                 all_input_ids.append(inputs["input_ids"].squeeze(0))
                 all_attention_masks.append(inputs["attention_mask"].squeeze(0))
                 
+                # Capture pixel_values if present (for vision models)
+                if "pixel_values" in inputs:
+                    all_pixel_values.append(inputs["pixel_values"].squeeze(0))
+                
             except Exception as e:
                 print(f"Warning: Sample processing failed: {e}")
                 continue
@@ -145,6 +149,9 @@ class CustomDataset(Dataset):
         from torch.nn.utils.rnn import pad_sequence
         input_ids = pad_sequence(all_input_ids, batch_first=True, padding_value=self.processor.tokenizer.pad_token_id)
         attention_mask = pad_sequence(all_attention_masks, batch_first=True, padding_value=0)
+        
+        # Stack pixel values if available
+        pixel_values = torch.stack(all_pixel_values) if all_pixel_values else None
 
         labels = input_ids.clone()
         
@@ -162,11 +169,17 @@ class CustomDataset(Dataset):
         labels[mask] = -100
         del mask
         
-        return {
+        result = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "labels": labels
         }
+        
+        # Add pixel_values if available
+        if pixel_values is not None:
+            result["pixel_values"] = pixel_values
+        
+        return result
     
 
     # For Pali-Gemma
