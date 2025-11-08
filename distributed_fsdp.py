@@ -194,14 +194,13 @@ class DistributedTrainer:
             save_strategy="epoch",
             learning_rate=float(self.config['training']['LEARNING_RATE']),
             bf16=True,
-            tf32=True,  # Enable TF32 for better performance on Ampere GPUs
             lr_scheduler_type="cosine",
             dataset_text_field='',
             dataset_kwargs={"skip_prepare_dataset": True},
             remove_unused_columns=False,
             save_only_model=True,
             dataloader_pin_memory=False,
-            dataloader_num_workers=0,  # Avoid multiprocessing issues with images
+            dataloader_num_workers=0, 
             # FSDP configuration for distributed training
             fsdp='full_shard auto_wrap' if self.world_size > 1 else '',
             fsdp_config={
