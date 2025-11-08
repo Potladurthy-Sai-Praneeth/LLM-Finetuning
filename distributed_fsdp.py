@@ -23,12 +23,11 @@ def setup_distributed():
     Initialize distributed training environment.
     This function detects if running in a distributed setting and initializes accordingly.
     Works with torchrun, Vertex AI, and other distributed launchers.
-    """
-    # Check if already initialized
-    if dist.is_available() and dist.is_initialized():
-        print("Distributed training already initialized")
-        return True
     
+    IMPORTANT: When using HuggingFace Trainer with FSDP, we should NOT manually call
+    dist.init_process_group(). The Trainer/Accelerate will handle initialization.
+    We only need to set the device and verify environment variables are set.
+    """
     # Detect distributed environment variables
     # These can be set by torchrun, Vertex AI, or other launchers
     world_size = int(os.environ.get('WORLD_SIZE', '1'))
@@ -37,26 +36,14 @@ def setup_distributed():
     
     # Check if we're in a distributed setting
     if world_size > 1:
-        print(f"Initializing distributed training: world_size={world_size}, rank={rank}, local_rank={local_rank}")
+        print(f"Detected distributed environment: world_size={world_size}, rank={rank}, local_rank={local_rank}")
+        print("Note: Distributed process group will be initialized by HuggingFace Trainer/Accelerate")
         
-        # Initialize the process group
-        if not dist.is_initialized():
-            # Set backend
-            backend = 'nccl' if torch.cuda.is_available() else 'gloo'
-            
-            # Initialize process group
-            dist.init_process_group(
-                backend=backend,
-                init_method='env://',  # Use environment variables
-                world_size=world_size,
-                rank=rank
-            )
-            
-            # Set the device for this process
-            if torch.cuda.is_available():
-                torch.cuda.set_device(local_rank)
-            
-            print(f"✓ Distributed training initialized on rank {rank}/{world_size}")
+        # Just set the device - don't initialize process group
+        # The HuggingFace Trainer will do that
+        if torch.cuda.is_available():
+            torch.cuda.set_device(local_rank)
+            print(f"✓ Set CUDA device to {local_rank} for rank {rank}")
         
         return True
     else:
@@ -68,9 +55,12 @@ def setup_distributed():
 
 def cleanup_distributed():
     """Clean up distributed training resources"""
+    # When using HuggingFace Trainer, the cleanup is handled automatically
+    # We don't need to manually destroy the process group
     if dist.is_available() and dist.is_initialized():
-        dist.destroy_process_group()
-        print("✓ Distributed training cleaned up")
+        print("Note: Process group cleanup will be handled by HuggingFace Trainer")
+        # dist.destroy_process_group()  # Don't call this when using Trainer
+        # print("✓ Distributed training cleaned up")
 
 
 class DistributedTrainer:
@@ -187,7 +177,7 @@ class DistributedTrainer:
             num_train_epochs=int(self.config['training']['NUM_TRAIN_EPOCHS']),
             per_device_train_batch_size=per_device_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
-            gradient_checkpointing=True,
+            # gradient_checkpointing=True,
             gradient_checkpointing_kwargs={"use_reentrant": False},
             optim="adamw_torch_fused",
             logging_steps=int(self.config['training']['LOGGING_STEPS']),
@@ -208,13 +198,16 @@ class DistributedTrainer:
                 'fsdp_activation_checkpointing': False,
                 **self.config['fsdp']
             } if self.world_size > 1 else None,
-            # Distributed training settings
-            local_rank=self.local_rank,
+            # Distributed training settings - DO NOT SET local_rank manually
             ddp_find_unused_parameters=False,
         )
     
     def train(self):
         """Execute the training loop"""
+        # CRITICAL: Set device for this process before any model operations
+        if torch.cuda.is_available():
+            torch.cuda.set_device(self.local_rank)
+        
         try:
             self.print_rank0("="*50)
             self.print_rank0("Starting Distributed Training")
@@ -318,9 +311,7 @@ class DistributedTrainer:
 
                 self.print_rank0(f"✓ Merged model saved to {merged_model_path}")
 
-            # Wait for all processes to complete
-            if self.world_size > 1:
-                dist.barrier()
+            print("✓ Training completed successfully")
 
         except Exception as e:
             print(f"\n✗ Error in training (rank {self.rank}): {str(e)}")

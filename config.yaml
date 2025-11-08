@@ -50,7 +50,7 @@ fsdp:
   fsdp_state_dict_type: FULL_STATE_DICT
   fsdp_cpu_ram_efficient_loading: false
   fsdp_sync_module_states: true
-  fsdp_use_orig_params: false
+  fsdp_use_orig_params: true
 
 
 
