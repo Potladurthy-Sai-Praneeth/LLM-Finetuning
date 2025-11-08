@@ -39,6 +39,7 @@ setup(
         "pillow",
         "PyYAML",
         "deepspeed",
+        "python-json-logger",
     ],
         
 )

@@ -10,4 +10,5 @@ torchaudio
 pillow
 PyYAML
 deepspeed
+python-json-logger
 # liger-kernel

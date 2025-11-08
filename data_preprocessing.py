@@ -92,15 +92,10 @@ class CustomDataset(Dataset):
             )
             
             if not image_content or not image_content.get("image"):
-                # if self.rank == 0:
                 print("Warning: Skipping a sample due to a missing image.")
                 continue
-                
-            chat_text = self.processor.apply_chat_template(
-                example["messages"], add_generation_prompt=False, tokenize=False
-            )
             
-            valid_samples.append((chat_text.strip(), image_content["image"]))
+            valid_samples.append((example["messages"], image_content["image"]))
 
         if not valid_samples:
             # Return a properly formatted empty batch instead of empty dict
@@ -110,28 +105,48 @@ class CustomDataset(Dataset):
                 "labels": torch.tensor([], dtype=torch.long)
             }
 
-        # Batch process all valid samples at once
-        texts, images = zip(*valid_samples)
+        # Process samples individually to avoid batch size mismatch
+        all_input_ids = []
+        all_attention_masks = []
+        all_labels = []
         
-        try:
-            inputs = self.processor(
-                text=list(texts), 
-                images=list(images), 
-                return_tensors="pt", 
-                padding=True, 
-                max_length=self.max_length, 
-                truncation=True
-            )
-        except Exception as e:
-            # if self.rank == 0:
-            print(f"Warning: Batch processing failed: {e}")
+        for messages, image in valid_samples:
+            try:
+                # Apply chat template to get formatted text
+                chat_text = self.processor.apply_chat_template(
+                    messages, add_generation_prompt=False, tokenize=False
+                )
+                
+                # Process single sample
+                inputs = self.processor(
+                    text=chat_text.strip(), 
+                    images=image, 
+                    return_tensors="pt", 
+                    padding=False,  # We'll pad the batch later
+                    max_length=self.max_length, 
+                    truncation=True
+                )
+                
+                all_input_ids.append(inputs["input_ids"].squeeze(0))
+                all_attention_masks.append(inputs["attention_mask"].squeeze(0))
+                
+            except Exception as e:
+                print(f"Warning: Sample processing failed: {e}")
+                continue
+        
+        if not all_input_ids:
             return {
                 "input_ids": torch.tensor([], dtype=torch.long),
                 "attention_mask": torch.tensor([], dtype=torch.long),
                 "labels": torch.tensor([], dtype=torch.long)
             }
+        
+        # Pad sequences to the same length
+        from torch.nn.utils.rnn import pad_sequence
+        input_ids = pad_sequence(all_input_ids, batch_first=True, padding_value=self.processor.tokenizer.pad_token_id)
+        attention_mask = pad_sequence(all_attention_masks, batch_first=True, padding_value=0)
 
-        labels = inputs["input_ids"].clone()
+        labels = input_ids.clone()
         
         # Get image token ID once and reuse
         image_token_id = self.processor.tokenizer.convert_tokens_to_ids(
@@ -144,13 +159,14 @@ class CustomDataset(Dataset):
             (labels == image_token_id) |
             (labels == 262144)
         )
-        # labels = torch.where(mask, torch.tensor(-100, dtype=labels.dtype), labels)
         labels[mask] = -100
         del mask
         
-        inputs['labels'] = labels
-        
-        return inputs
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "labels": labels
+        }
     
 
     # For Pali-Gemma
