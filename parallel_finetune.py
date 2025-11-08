@@ -167,10 +167,9 @@ class Trainer:
             print("\n[STEP 2] Loading dataset...")
             print(f"Dataset ID: {self.config['dataset']['DATASET_ID']}")
             raw_dataset = load_dataset(self.config['dataset']['DATASET_ID'], split="train")
-            raw_dataset = raw_dataset.select(self.config['dataset'].get('NUM_SAMPLES', 100))
+            raw_dataset = raw_dataset.select(range(self.config['dataset'].get('NUM_SAMPLES', 100)))
             print("✓ Raw dataset loaded successfully")
 
-            # raw_dataset = raw_dataset.select(range(2))
             
             dataset = CustomDataset(raw_dataset, self.processor, img_size=self.config['model']['IMG_SIZE'], max_length=self.config['model']['MAX_SEQ_LENGTH'])
             print(f"✓ Custom dataset created with {len(dataset)} samples")
