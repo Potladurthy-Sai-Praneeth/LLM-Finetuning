@@ -1,11 +1,9 @@
 import os
 from pathlib import Path
 import traceback
-import sys
 import json
 
 from .data_preprocessing import CustomDataset
-from .inference import get_merged_model
 
 import torch
 import torch.distributed as dist
@@ -15,47 +13,10 @@ from transformers import (
     AutoProcessor,
     AutoModelForImageTextToText,
 )
-from peft import LoraConfig, prepare_model_for_kbit_training, PeftModel
+from peft import LoraConfig, PeftModel #, prepare_model_for_kbit_training
 from trl import SFTTrainer, SFTConfig
-import multiprocessing as mp
-from transformers import PaliGemmaProcessor, PaliGemmaForConditionalGeneration
+# from transformers import PaliGemmaProcessor, PaliGemmaForConditionalGeneration
 import yaml
-import deepspeed
-
-
-def initialize_distributed():
-    """Manually initialize PyTorch distributed using env vars."""
-    if 'WORLD_SIZE' not in os.environ or int(os.environ['WORLD_SIZE']) <= 1:
-        # Not a distributed job, skip initialization
-        return    
-    # 1. Manually set LOCAL_RANK (for device assignment)
-    if 'LOCAL_RANK' not in os.environ:
-        try:
-            if 'CUDA_VISIBLE_DEVICES' in os.environ:
-                local_rank = int(os.environ['CUDA_VISIBLE_DEVICES'].split(',')[0])
-            else:
-                local_rank = int(os.environ['RANK'])
-            
-            os.environ['LOCAL_RANK'] = str(local_rank)
-            print(f"Set LOCAL_RANK to {local_rank}")
-            
-        except (KeyError, ValueError) as e:
-            print(f"Could not set LOCAL_RANK using Vertex AI variables: {e}. Falling back to 0.")
-            os.environ['LOCAL_RANK'] = '0'
-
-    # 2. Initialize process group
-    if not dist.is_initialized():
-        dist.init_process_group(
-            backend='nccl', 
-            init_method='env://' 
-        )
-        print("✓ PyTorch distributed process group initialized.")
-    
-    # 3. Set the CUDA device
-    local_rank = int(os.environ['LOCAL_RANK'])
-    torch.cuda.set_device(local_rank)
-    print(f"✓ CUDA device set to {local_rank}")
-
 
 class Trainer:
     """Handles DeepSpeed training setup and execution"""
@@ -64,13 +25,6 @@ class Trainer:
         self.processor = None
         self.model = None
         self.config = {}
-        
-        # Initialize DeepSpeed distributed training early for QLoRA
-        # if not dist.is_initialized():
-        #     deepspeed.init_distributed()
-        # if torch.cuda.is_available():
-        #     local_rank = int(os.environ.get("LOCAL_RANK", 0))
-        #     torch.cuda.set_device(local_rank)
         self._load_config()
             
 
@@ -78,7 +32,7 @@ class Trainer:
         """Load configuration from YAML file"""
         # Try multiple locations for config file
         config_locations = [
-            # 1. Environment variable (highest priority) - useful for cloud platforms
+            # 1. Environment variable (highest priority) 
             os.environ.get('CONFIG_PATH'),
             # 2. Script directory (where this file is located) - finetune folder
             Path(__file__).parent / "config.yaml",
@@ -107,7 +61,7 @@ class Trainer:
 
         # Load DeepSpeed configuration
         ds_config_locations = [
-            # 1. Environment variable (highest priority) - useful for cloud platforms
+            # 1. Environment variable (highest priority)
             os.environ.get('DS_CONFIG_PATH'),
             # 2. Script directory (where this file is located) - finetune folder
             Path(__file__).parent / "ds_config.json",
@@ -172,9 +126,6 @@ class Trainer:
         
         print(f"Loading model on CPU: {self.config['model']['BASE_MODEL_ID']}")
         
-        # Load model on CPU first to avoid GPU memory issues  
-        # local_rank = int(os.environ.get("LOCAL_RANK", "0"))
-        # device_map = {"": local_rank} if torch.cuda.is_available() else {"": "cpu"}
         model = AutoModelForImageTextToText.from_pretrained(
         # model = PaliGemmaForConditionalGeneration.from_pretrained(
                 self.config['model']['BASE_MODEL_ID'],
@@ -182,7 +133,6 @@ class Trainer:
                 dtype=torch.bfloat16,
                 trust_remote_code=True,
                 low_cpu_mem_usage=True,
-                # device_map=device_map,
             )
         
         model.config.use_cache = False
@@ -216,10 +166,8 @@ class Trainer:
             # dataloader_num_workers=mp.cpu_count(),
             remove_unused_columns=False,
             save_only_model=True,
-            dataloader_pin_memory=False,
+            dataloader_pin_memory=True,
             deepspeed=self.ds_config,
-            # local_rank=int(os.environ.get('LOCAL_RANK', -1)),
-            # ddp_find_unused_parameters=False,
             report_to=None,  
         )
 
@@ -320,7 +268,6 @@ class Trainer:
 
 def main():
     """Main entry point"""
-    # initialize_distributed()
     try:
         trainer = Trainer()
         trainer.run()

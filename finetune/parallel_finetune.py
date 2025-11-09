@@ -1,10 +1,8 @@
 import os
 from pathlib import Path
 import traceback
-import sys
 
 from .data_preprocessing import CustomDataset
-from .inference import get_merged_model
 
 import torch
 from datasets import load_dataset
@@ -14,14 +12,10 @@ from transformers import (
     AutoModelForImageTextToText,
 )
 from peft import LoraConfig, prepare_model_for_kbit_training, PeftModel
-from peft.utils.other import fsdp_auto_wrap_policy
 from trl import SFTTrainer, SFTConfig
 import yaml
-from torch.distributed.fsdp.wrap import lambda_auto_wrap_policy
-from transformers.models.gemma3.modeling_gemma3 import Gemma3DecoderLayer, Gemma3RMSNorm
-from transformers.models.paligemma.modeling_paligemma import PaliGemmaModel
-from typing import Callable
-from transformers import PaliGemmaProcessor, PaliGemmaForConditionalGeneration
+
+# from transformers import PaliGemmaProcessor, PaliGemmaForConditionalGeneration
 
 # class CustomSFTTrainer(SFTTrainer):
 #     def _fsdp_qlora_plugin_updates(self):
@@ -109,6 +103,7 @@ class Trainer:
             dtype=torch.bfloat16,
             trust_remote_code=True,
             low_cpu_mem_usage=True,
+            device_map={'':torch.cuda.current_device()},
         )
 
         model.config.use_cache = False
@@ -140,7 +135,6 @@ class Trainer:
         gradient_accumulation_steps = int(self.config['training']['GRADIENT_ACCUMULATION_STEPS'])
 
         return SFTConfig(
-            # use_liger_kernel=True,
             output_dir=self.config['training']['OUTPUT_DIR'],
             num_train_epochs=int(self.config['training']['NUM_TRAIN_EPOCHS']),
             per_device_train_batch_size=effective_batch_size,

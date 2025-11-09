@@ -181,8 +181,9 @@ class CustomDataset(Dataset):
         
         return result
     
-
-    # For Pali-Gemma
+# =========================================================================
+#                             For Pali-Gemma
+# =========================================================================
     # def format_data(self, image, question, answer):
     #     # PaliGemma format: <image> question\nanswer
     #     return {
