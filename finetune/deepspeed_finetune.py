@@ -206,7 +206,7 @@ class Trainer:
             num_train_epochs=int(self.config['training']['NUM_TRAIN_EPOCHS']),
             per_device_train_batch_size=per_device_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
-            # gradient_checkpointing=True,
+            gradient_checkpointing=True,
             gradient_checkpointing_kwargs={"use_reentrant": False},
             logging_steps=int(self.config['training']['LOGGING_STEPS']),
             save_strategy="epoch",
@@ -216,10 +216,10 @@ class Trainer:
             # dataloader_num_workers=mp.cpu_count(),
             remove_unused_columns=False,
             save_only_model=True,
-            dataloader_pin_memory=True,
+            dataloader_pin_memory=False,
             deepspeed=self.ds_config,
             local_rank=int(os.environ.get('LOCAL_RANK', -1)),
-            ddp_find_unused_parameters=False,
+            # ddp_find_unused_parameters=False,
             report_to=None,  
         )
 
