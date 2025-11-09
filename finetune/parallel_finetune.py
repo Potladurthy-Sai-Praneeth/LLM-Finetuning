@@ -169,7 +169,7 @@ class Trainer:
         )
     
     def train(self): 
-        torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
+        # torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
         try:
             print("="*50)
             print("Starting training")
