@@ -173,8 +173,8 @@ class Trainer:
         print(f"Loading model on CPU: {self.config['model']['BASE_MODEL_ID']}")
         
         # Load model on CPU first to avoid GPU memory issues  
-        local_rank = int(os.environ.get("LOCAL_RANK", "0"))
-        device_map = {"": local_rank} if torch.cuda.is_available() else {"": "cpu"}
+        # local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+        # device_map = {"": local_rank} if torch.cuda.is_available() else {"": "cpu"}
         model = AutoModelForImageTextToText.from_pretrained(
         # model = PaliGemmaForConditionalGeneration.from_pretrained(
                 self.config['model']['BASE_MODEL_ID'],
@@ -182,7 +182,7 @@ class Trainer:
                 dtype=torch.bfloat16,
                 trust_remote_code=True,
                 low_cpu_mem_usage=True,
-                device_map=device_map,
+                # device_map=device_map,
             )
         
         model.config.use_cache = False
@@ -218,7 +218,7 @@ class Trainer:
             save_only_model=True,
             dataloader_pin_memory=False,
             deepspeed=self.ds_config,
-            local_rank=int(os.environ.get('LOCAL_RANK', -1)),
+            # local_rank=int(os.environ.get('LOCAL_RANK', -1)),
             # ddp_find_unused_parameters=False,
             report_to=None,  
         )
@@ -320,7 +320,7 @@ class Trainer:
 
 def main():
     """Main entry point"""
-    initialize_distributed()
+    # initialize_distributed()
     try:
         trainer = Trainer()
         trainer.run()
