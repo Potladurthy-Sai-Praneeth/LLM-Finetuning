@@ -158,7 +158,8 @@ class Trainer:
                 'fsdp_transformer_layer_cls_to_wrap': ['Gemma3DecoderLayer'],
                 # 'fsdp_transformer_layer_cls_to_wrap': ['PaliGemmaModel'],
                 **self.config['fsdp']
-            }
+            },
+            report_to=None,
         )
     
     def train(self): 

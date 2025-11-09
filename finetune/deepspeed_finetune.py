@@ -151,7 +151,6 @@ class Trainer:
         gradient_accumulation_steps = int(self.config['training']['GRADIENT_ACCUMULATION_STEPS'])
 
         return SFTConfig(
-            # use_liger_kernel=True,
             output_dir=self.config['training']['OUTPUT_DIR'],
             num_train_epochs=int(self.config['training']['NUM_TRAIN_EPOCHS']),
             per_device_train_batch_size=per_device_batch_size,
@@ -163,7 +162,6 @@ class Trainer:
             bf16=True,
             dataset_text_field='',
             dataset_kwargs={"skip_prepare_dataset": True},
-            # dataloader_num_workers=mp.cpu_count(),
             remove_unused_columns=False,
             save_only_model=True,
             dataloader_pin_memory=True,
@@ -188,7 +186,8 @@ class Trainer:
             print("\n[STEP 2] Loading dataset...")
             print(f"Dataset ID: {self.config['dataset']['DATASET_ID']}")
             raw_dataset = load_dataset(self.config['dataset']['DATASET_ID'], split="train")
-            raw_dataset = raw_dataset.select(range(self.config['dataset'].get('NUM_SAMPLES', 100)))
+            # raw_dataset = raw_dataset.select(range(self.config['dataset'].get('NUM_SAMPLES', 100)))
+            raw_dataset = raw_dataset.select(range(3))
             print("✓ Raw dataset loaded successfully")
 
             dataset = CustomDataset(raw_dataset, self.processor, img_size=self.config['model']['IMG_SIZE'], max_length=self.config['model']['MAX_SEQ_LENGTH'])
