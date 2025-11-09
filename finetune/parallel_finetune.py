@@ -14,6 +14,7 @@ from transformers import (
 from peft import LoraConfig, prepare_model_for_kbit_training, PeftModel
 from trl import SFTTrainer, SFTConfig
 import yaml
+from accelerate import PartialState
 
 # from transformers import PaliGemmaProcessor, PaliGemmaForConditionalGeneration
 
@@ -103,7 +104,7 @@ class Trainer:
             dtype=torch.bfloat16,
             trust_remote_code=True,
             low_cpu_mem_usage=True,
-            device_map={'':torch.cuda.current_device()},
+            device_map={"": PartialState().process_index},
         )
 
         model.config.use_cache = False
