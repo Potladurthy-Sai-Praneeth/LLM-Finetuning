@@ -42,20 +42,60 @@ class Trainer:
 
     def _load_config(self):
         """Load configuration from YAML file"""
-        # Get the directory where this script is located
-        script_dir = Path(__file__).parent
-        config_path = script_dir / "config.yaml"
-
-        if not config_path.exists():
-            raise FileNotFoundError(f"Config file not found at {config_path}")
+        # Try multiple locations for config file
+        config_locations = [
+            # 1. Environment variable (highest priority) - useful for cloud platforms
+            os.environ.get('CONFIG_PATH'),
+            # 2. Script directory (where this file is located) - finetune folder
+            Path(__file__).parent / "config.yaml",
+            # 3. Finetune directory relative to current working directory
+            Path.cwd() / "finetune" / "config.yaml",
+            # 4. Current working directory
+            Path.cwd() / "config.yaml",
+            # 5. Home directory
+            Path.home() / "config.yaml",
+        ]
+        
+        config_path = None
+        for location in config_locations:
+            if location and Path(location).exists():
+                config_path = Path(location)
+                print(f"Found config file at: {config_path}")
+                break
+        
+        if not config_path:
+            error_msg = "Config file not found. Searched in:\n"
+            error_msg += "\n".join([f"  - {loc}" for loc in config_locations if loc])
+            raise FileNotFoundError(error_msg)
 
         with open(config_path, "r") as file:
             self.config = yaml.safe_load(file)
 
         # Load DeepSpeed configuration
-        ds_config_path = script_dir / "ds_config.json"
-        if not ds_config_path.exists():
-            raise FileNotFoundError(f"DeepSpeed config file not found at {ds_config_path}")
+        ds_config_locations = [
+            # 1. Environment variable (highest priority) - useful for cloud platforms
+            os.environ.get('DS_CONFIG_PATH'),
+            # 2. Script directory (where this file is located) - finetune folder
+            Path(__file__).parent / "ds_config.json",
+            # 3. Finetune directory relative to current working directory
+            Path.cwd() / "finetune" / "ds_config.json",
+            # 4. Current working directory
+            Path.cwd() / "ds_config.json",
+            # 5. Home directory
+            Path.home() / "ds_config.json",
+        ]
+        
+        ds_config_path = None
+        for location in ds_config_locations:
+            if location and Path(location).exists():
+                ds_config_path = Path(location)
+                print(f"Found DeepSpeed config file at: {ds_config_path}")
+                break
+        
+        if not ds_config_path:
+            error_msg = "DeepSpeed config file not found. Searched in:\n"
+            error_msg += "\n".join([f"  - {loc}" for loc in ds_config_locations if loc])
+            raise FileNotFoundError(error_msg)
 
         with open(ds_config_path, "r") as file:
             self.ds_config = json.load(file)

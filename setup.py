@@ -12,15 +12,13 @@ setup(
     description="Fine-tuning Large Vision-Language Models with QLoRA, FSDP, and DeepSpeed",
     # Package discovery
     packages=find_packages(exclude=["tests", "tests.*", "notebooks", "*.ipynb"]),
-    py_modules=[
-        "data_preprocessing",
-        "finetuning",
-        "inference",
-        "parallel_finetune",
-        "deepspeed_finetune",
-        "distributed_training",
-        "distributed_deepspeed",
-    ],
+    
+    
+    # Include package data
+    package_data={
+        "finetune": ["config.yaml","ds_config.json"],
+    },
+    include_package_data=True,
     
     # Python version requirement
     python_requires=">3.8,<=3.12",

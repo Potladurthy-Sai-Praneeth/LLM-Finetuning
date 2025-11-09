@@ -1,0 +1,4 @@
+include config.yaml
+include ds_config.json
+include README.md
+include requirements.txt
