@@ -15,6 +15,8 @@ from peft import LoraConfig, prepare_model_for_kbit_training, PeftModel
 from trl import SFTTrainer, SFTConfig
 import yaml
 from accelerate import PartialState
+import wandb
+wandb.init(mode="disabled")
 
 # from transformers import PaliGemmaProcessor, PaliGemmaForConditionalGeneration
 

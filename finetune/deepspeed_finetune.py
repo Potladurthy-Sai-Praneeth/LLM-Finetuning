@@ -17,6 +17,8 @@ from peft import LoraConfig, PeftModel #, prepare_model_for_kbit_training
 from trl import SFTTrainer, SFTConfig
 # from transformers import PaliGemmaProcessor, PaliGemmaForConditionalGeneration
 import yaml
+import wandb
+wandb.init(mode="disabled")
 
 class Trainer:
     """Handles DeepSpeed training setup and execution"""

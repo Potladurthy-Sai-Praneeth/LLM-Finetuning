@@ -38,6 +38,7 @@ setup(
         "PyYAML",
         "deepspeed",
         "python-json-logger",
+        "wandb",
     ],
         
 )

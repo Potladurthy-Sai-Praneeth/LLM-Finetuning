@@ -11,4 +11,5 @@ pillow
 PyYAML
 deepspeed
 python-json-logger
+wandb
 # liger-kernel
