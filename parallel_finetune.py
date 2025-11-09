@@ -138,7 +138,7 @@ class Trainer:
             dataset_kwargs={"skip_prepare_dataset": True},
             remove_unused_columns=False,
             save_only_model=True,
-            dataloader_pin_memory=False,
+            dataloader_pin_memory=True,
             # Tell the trainer to use FSDP
             fsdp='full_shard auto_wrap',
             fsdp_config={

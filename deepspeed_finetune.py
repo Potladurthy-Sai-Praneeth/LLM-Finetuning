@@ -142,7 +142,7 @@ class Trainer:
             # dataloader_num_workers=mp.cpu_count(),
             remove_unused_columns=False,
             save_only_model=True,
-            dataloader_pin_memory=False,
+            dataloader_pin_memory=True,
             deepspeed=self.ds_config,
             local_rank=int(os.environ.get('LOCAL_RANK', -1)),
             ddp_find_unused_parameters=False,
