@@ -207,7 +207,7 @@ class Trainer:
             per_device_train_batch_size=per_device_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
             gradient_checkpointing=True,
-            gradient_checkpointing_kwargs={"use_reentrant": False},
+            gradient_checkpointing_kwargs={"use_reentrant": True},
             logging_steps=int(self.config['training']['LOGGING_STEPS']),
             save_strategy="epoch",
             bf16=True,
