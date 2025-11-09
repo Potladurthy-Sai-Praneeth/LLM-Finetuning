@@ -4,8 +4,8 @@ import traceback
 import sys
 import json
 
-from data_preprocessing import CustomDataset
-from inference import get_merged_model
+from .data_preprocessing import CustomDataset
+from .inference import get_merged_model
 
 import torch
 import torch.distributed as dist

@@ -3,8 +3,8 @@ from pathlib import Path
 import traceback
 import sys
 
-from data_preprocessing import CustomDataset
-from inference import get_merged_model
+from .data_preprocessing import CustomDataset
+from .inference import get_merged_model
 
 import torch
 from datasets import load_dataset
