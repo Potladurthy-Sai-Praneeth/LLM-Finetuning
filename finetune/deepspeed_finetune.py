@@ -19,11 +19,11 @@ from trl import SFTTrainer, SFTConfig
 import yaml
 import wandb
 wandb.init(mode="disabled")
-# from huggingface_hub import login
-# from dotenv import load_dotenv
-# load_dotenv()
+from huggingface_hub import login
+from dotenv import load_dotenv
+load_dotenv()
 # Login to Hugging Face Hub
-# login(token=os.getenv("HF_LOGIN_TOKEN"))
+login(token=os.getenv("HF_LOGIN_TOKEN"))
 
 class Trainer:
     """Handles DeepSpeed training setup and execution"""
@@ -219,6 +219,11 @@ class Trainer:
                 peft_config=self._get_peft_config(),
                 data_collator=dataset.collate_fn,
             )
+
+            for name, param in trainer.model.named_parameters():
+                if (param.dtype == torch.float32):
+                    param.data = param.data.to(torch.bfloat16)
+
             print("✓ Trainer initialized successfully")
 
             print("\n[STEP 4] Starting training loop...")
