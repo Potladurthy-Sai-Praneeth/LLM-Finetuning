@@ -43,7 +43,7 @@ class Trainer:
         """Load configuration from YAML file"""
         # Try multiple locations for config file
         config_locations = [
-            # 1. Environment variable (highest priority) - useful for cloud platforms
+            # 1. Environment variable (highest priority) 
             os.environ.get('CONFIG_PATH'),
             # 2. Script directory (where this file is located) - finetune folder
             Path(__file__).parent / "config.yaml",
@@ -222,7 +222,7 @@ class Trainer:
 
                 base_model = AutoModelForImageTextToText.from_pretrained(
                     self.config['model']['BASE_MODEL_ID'],
-                    torch_dtype=torch.bfloat16,
+                    dtype=torch.bfloat16,
                     trust_remote_code=True
                 )
 

@@ -14,7 +14,7 @@ model:
 
 dataset:
   DATASET_ID : "mmoukouba/MedPix-Grouped-QA"
-  NUM_SAMPLES : 2
+  NUM_SAMPLES : 1000
 
 training:
   OUTPUT_DIR : "gemma-medical"
@@ -22,7 +22,7 @@ training:
   GRADIENT_ACCUMULATION_STEPS : 4
   LEARNING_RATE : 2e-4
   WEIGHT_DECAY : 0.0
-  NUM_TRAIN_EPOCHS : 1
+  NUM_TRAIN_EPOCHS : 2
   LR_WARMUP_STEPS : 50
   MAX_GRAD_NORM : 0.3
   SAVE_TOTAL_LIMIT : 3

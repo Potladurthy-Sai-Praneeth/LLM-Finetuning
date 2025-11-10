@@ -189,7 +189,7 @@ class Trainer:
             print(f"Dataset ID: {self.config['dataset']['DATASET_ID']}")
             raw_dataset = load_dataset(self.config['dataset']['DATASET_ID'], split="train")
             # raw_dataset = raw_dataset.select(range(self.config['dataset'].get('NUM_SAMPLES', 100)))
-            raw_dataset = raw_dataset.select(range(3))
+            raw_dataset = raw_dataset.select(range(2))
             print("✓ Raw dataset loaded successfully")
 
             dataset = CustomDataset(raw_dataset, self.processor, img_size=self.config['model']['IMG_SIZE'], max_length=self.config['model']['MAX_SEQ_LENGTH'])
@@ -213,40 +213,78 @@ class Trainer:
             trainer.train()
             print("✓ Training completed successfully")
 
-            print("\n[STEP 5] Saving the final adapter...")
+            print("\n[STEP 5] Saving the adapter with DeepSpeed state synchronization...")
             adapter_path = os.path.join(self.config['training']['OUTPUT_DIR'], "final_adapter")
-            trainer.save_model(adapter_path)
-            print(f"✓ Adapter saved to {adapter_path}")
+            
+            # Wait for all processes to finish training
+            trainer.accelerator.wait_for_everyone()
+            
+            # Get the state dict from DeepSpeed
+            state_dict = trainer.accelerator.get_state_dict(trainer.deepspeed)
+            unwrapped_model = trainer.accelerator.unwrap_model(trainer.deepspeed)
+            
+            # Save adapter on main process only
+            if trainer.accelerator.is_main_process:
+                unwrapped_model.save_pretrained(adapter_path, state_dict=state_dict, safe_serialization=True)
+                print(f"✓ Adapter saved to {adapter_path}")
+            
+            # Wait for main process to finish saving
+            trainer.accelerator.wait_for_everyone()
 
-            # Check if this is the main process (rank 0) for model merging
-            if trainer.is_world_process_zero():
-                print("\n[STEP 6] Merging adapter with base model on main process (rank 0)...")
-
-                # For DeepSpeed, we need to gather the model from all processes first
-                trainer.model.save_pretrained(adapter_path)
-
-                base_model = AutoModelForImageTextToText.from_pretrained(
-                    self.config['model']['BASE_MODEL_ID'],
-                    torch_dtype=torch.bfloat16,
-                    trust_remote_code=True
-                )
-
-                model_to_merge = PeftModel.from_pretrained(base_model, adapter_path)
-
-                # Merge the adapter weights into the base model
-                print("Merging LoRA layers...")
-                merged_model = model_to_merge.merge_and_unload()
-                print("✓ LoRA layers merged successfully")
-
-                # Save the merged model
-                merged_model_path = os.path.join(self.config['training']['OUTPUT_DIR'], "final_merged_model")
-                merged_model.save_pretrained(merged_model_path)
-
-                # Also save the tokenizer for easy future use
-                if self.processor and hasattr(self.processor, 'tokenizer'):
-                    self.processor.tokenizer.save_pretrained(merged_model_path)
-
-                print(f"✓ Merged model saved to {merged_model_path}")
+            # Check if we should merge adapters (only on rank 0)
+            merge_adapters = self.config.get('training', {}).get('MERGE_ADAPTERS', True)
+            
+            if trainer.args.process_index == 0:
+                if merge_adapters:
+                    print("\n[STEP 6] Merging adapter with base model on main process (rank 0)...")
+                    
+                    # Save the quantized model first
+                    trainer.model.save_pretrained(adapter_path, safe_serialization=False)
+                    
+                    # Clear memory
+                    del model
+                    del trainer
+                    torch.cuda.empty_cache()
+                    
+                    print("Loading PEFT model for merging...")
+                   
+                    base_model = AutoModelForImageTextToText.from_pretrained(
+                        self.config['model']['BASE_MODEL_ID'],
+                        dtype=torch.bfloat16,
+                        trust_remote_code=True,
+                        low_cpu_mem_usage=True
+                    )
+                    model_to_merge = PeftModel.from_pretrained(base_model, adapter_path)
+                    
+                    # Merge LoRA and base model
+                    print("Merging LoRA layers...")
+                    merged_model = model_to_merge.merge_and_unload()
+                    print("✓ LoRA layers merged successfully")
+                    
+                    # Save the merged model
+                    merged_model_path = os.path.join(self.config['training']['OUTPUT_DIR'], "final_merged_model")
+                    merged_model.save_pretrained(
+                        merged_model_path, 
+                        safe_serialization=True,
+                    )
+                    print(f"✓ Merged model saved to {merged_model_path}")
+                    
+                    # Save the processor/tokenizer
+                    if self.processor:
+                        if hasattr(self.processor, 'tokenizer'):
+                            self.processor.tokenizer.save_pretrained(merged_model_path)
+                        self.processor.save_pretrained(merged_model_path)
+                        print(f"✓ Processor/tokenizer saved to {merged_model_path}")
+                else:
+                    print("\n[STEP 6] Saving adapter only (merge disabled)...")
+                    trainer.model.save_pretrained(adapter_path, safe_serialization=True)
+                    
+                    # Save the processor/tokenizer
+                    if self.processor:
+                        if hasattr(self.processor, 'tokenizer'):
+                            self.processor.tokenizer.save_pretrained(adapter_path)
+                        self.processor.save_pretrained(adapter_path)
+                        print(f"✓ Processor/tokenizer saved to {adapter_path}")
 
         except Exception as e:
             print(f"\n✗ Error in training: {str(e)}")
