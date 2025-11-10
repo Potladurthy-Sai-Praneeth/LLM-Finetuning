@@ -215,27 +215,25 @@ class Trainer:
 
             print("\n[STEP 5] Saving the adapter with DeepSpeed state synchronization...")
             adapter_path = os.path.join(self.config['training']['OUTPUT_DIR'], "final_adapter")
+            trainer.save_model(adapter_path)
             
             # Wait for all processes to finish training
-            trainer.accelerator.wait_for_everyone()
+            # trainer.accelerator.wait_for_everyone()
             
-            # Get the state dict from DeepSpeed
-            state_dict = trainer.accelerator.get_state_dict(trainer.deepspeed)
-            unwrapped_model = trainer.accelerator.unwrap_model(trainer.deepspeed)
+            # # Get the state dict from DeepSpeed
+            # state_dict = trainer.accelerator.get_state_dict(trainer.deepspeed)
+            # unwrapped_model = trainer.accelerator.unwrap_model(trainer.deepspeed)
             
-            # Save adapter on main process only
-            if trainer.accelerator.is_main_process:
-                unwrapped_model.save_pretrained(adapter_path, state_dict=state_dict, safe_serialization=True)
-                print(f"✓ Adapter saved to {adapter_path}")
+            # # Save adapter on main process only
+            # if trainer.accelerator.is_main_process:
+            #     unwrapped_model.save_pretrained(adapter_path, state_dict=state_dict, safe_serialization=True)
+            #     print(f"✓ Adapter saved to {adapter_path}")
             
-            # Wait for main process to finish saving
-            trainer.accelerator.wait_for_everyone()
+            # # Wait for main process to finish saving
+            # trainer.accelerator.wait_for_everyone()
             
             if trainer.is_world_process_zero():
                 print("\n[STEP 6] Merging adapter with base model on main process (rank 0)...")
-                
-                # Save the quantized model first
-                trainer.save_model(adapter_path)
                 
                 print("Loading PEFT model for merging...")
                 
@@ -263,6 +261,8 @@ class Trainer:
                 self.processor.save_pretrained(merged_model_path)
                 
                 print(f"✓ Processor/tokenizer saved to {merged_model_path}")
+            
+            trainer.accelerator.wait_for_everyone()
                
 
         except Exception as e:
