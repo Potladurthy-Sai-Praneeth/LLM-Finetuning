@@ -149,7 +149,15 @@ class Trainer:
             print("\n[STEP 2] Loading dataset...")
             print(f"Dataset ID: {self.config['dataset']['DATASET_ID']}")
             raw_dataset = load_dataset(self.config['dataset']['DATASET_ID'], split="train")
-            raw_dataset = raw_dataset.select(self.config['dataset'].get('NUM_SAMPLES', 100))
+            
+            # Shuffle dataset to ensure random sampling across different images/questions
+            num_samples = self.config['dataset'].get('NUM_SAMPLES', 100)
+            if num_samples < len(raw_dataset):
+                raw_dataset = raw_dataset.shuffle(seed=42)
+                raw_dataset = raw_dataset.select(range(num_samples))
+                print(f"✓ Dataset shuffled and sampled {num_samples} examples")
+            else:
+                print(f"✓ Using full dataset with {len(raw_dataset)} examples")
             print("✓ Raw dataset loaded successfully")
 
             

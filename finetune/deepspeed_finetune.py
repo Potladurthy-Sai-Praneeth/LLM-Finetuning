@@ -188,8 +188,15 @@ class Trainer:
             print("\n[STEP 2] Loading dataset...")
             print(f"Dataset ID: {self.config['dataset']['DATASET_ID']}")
             raw_dataset = load_dataset(self.config['dataset']['DATASET_ID'], split="train")
-            # raw_dataset = raw_dataset.select(range(self.config['dataset'].get('NUM_SAMPLES', 100)))
-            raw_dataset = raw_dataset.select(range(2))
+            
+            # Shuffle dataset to ensure random sampling across different images/questions
+            num_samples = self.config['dataset'].get('NUM_SAMPLES', 100)
+            if num_samples < len(raw_dataset):
+                raw_dataset = raw_dataset.shuffle(seed=42)
+                raw_dataset = raw_dataset.select(range(num_samples))
+                print(f"✓ Dataset shuffled and sampled {num_samples} examples")
+            else:
+                print(f"✓ Using full dataset with {len(raw_dataset)} examples")
             print("✓ Raw dataset loaded successfully")
 
             dataset = CustomDataset(raw_dataset, self.processor, img_size=self.config['model']['IMG_SIZE'], max_length=self.config['model']['MAX_SEQ_LENGTH'])
@@ -214,37 +221,36 @@ class Trainer:
             print("✓ Training completed successfully")
 
             print("\n[STEP 5] Saving the final adapter...")
-            del model
 
             adapter_path = os.path.join(self.config['training']['OUTPUT_DIR'], "final_adapter")
             trainer.save_model(adapter_path)
             print(f"✓ Adapter saved to {adapter_path}")
 
             # Check if this is the main process (rank 0) for model merging
-            if trainer.is_world_process_zero():
-                print("\n[STEP 6] Merging adapter with base model on main process (rank 0)...")
-                base_model = AutoModelForImageTextToText.from_pretrained(
-                    self.config['model']['BASE_MODEL_ID'],
-                    dtype=torch.bfloat16,
-                    trust_remote_code=True
-                )
+            # if trainer.is_world_process_zero():
+            #     print("\n[STEP 6] Merging adapter with base model on main process (rank 0)...")
+            #     base_model = AutoModelForImageTextToText.from_pretrained(
+            #         self.config['model']['BASE_MODEL_ID'],
+            #         dtype=torch.bfloat16,
+            #         trust_remote_code=True
+            #     )
 
-                model_to_merge = PeftModel.from_pretrained(base_model, adapter_path)
+            #     model_to_merge = PeftModel.from_pretrained(base_model, adapter_path)
 
-                # Merge the adapter weights into the base model
-                print("Merging LoRA layers...")
-                merged_model = model_to_merge.merge_and_unload()
-                print("✓ LoRA layers merged successfully")
+            #     # Merge the adapter weights into the base model
+            #     print("Merging LoRA layers...")
+            #     merged_model = model_to_merge.merge_and_unload()
+            #     print("✓ LoRA layers merged successfully")
 
-                # Save the merged model
-                merged_model_path = os.path.join(self.config['training']['OUTPUT_DIR'], "final_merged_model")
-                merged_model.save_pretrained(merged_model_path)
+            #     # Save the merged model
+            #     merged_model_path = os.path.join(self.config['training']['OUTPUT_DIR'], "final_merged_model")
+            #     merged_model.save_pretrained(merged_model_path)
 
-                # Also save the tokenizer for easy future use
-                if self.processor and hasattr(self.processor, 'tokenizer'):
-                    self.processor.tokenizer.save_pretrained(merged_model_path)
+            #     # Also save the tokenizer for easy future use
+            #     if self.processor and hasattr(self.processor, 'tokenizer'):
+            #         self.processor.tokenizer.save_pretrained(merged_model_path)
 
-                print(f"✓ Merged model saved to {merged_model_path}")
+            #     print(f"✓ Merged model saved to {merged_model_path}")
 
         except Exception as e:
             print(f"\n✗ Error in training: {str(e)}")
