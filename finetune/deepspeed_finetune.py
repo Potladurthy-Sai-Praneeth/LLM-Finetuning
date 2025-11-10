@@ -214,6 +214,8 @@ class Trainer:
             print("✓ Training completed successfully")
 
             print("\n[STEP 5] Saving the final adapter...")
+            del model
+
             adapter_path = os.path.join(self.config['training']['OUTPUT_DIR'], "final_adapter")
             trainer.save_model(adapter_path)
             print(f"✓ Adapter saved to {adapter_path}")
@@ -221,10 +223,6 @@ class Trainer:
             # Check if this is the main process (rank 0) for model merging
             if trainer.is_world_process_zero():
                 print("\n[STEP 6] Merging adapter with base model on main process (rank 0)...")
-
-                # For DeepSpeed, we need to gather the model from all processes first
-                trainer.model.save_pretrained(adapter_path)
-
                 base_model = AutoModelForImageTextToText.from_pretrained(
                     self.config['model']['BASE_MODEL_ID'],
                     dtype=torch.bfloat16,
