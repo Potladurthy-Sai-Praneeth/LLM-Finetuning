@@ -12,4 +12,6 @@ PyYAML
 deepspeed
 python-json-logger
 wandb
+huggingface-hub
+python-dotenv
 # liger-kernel

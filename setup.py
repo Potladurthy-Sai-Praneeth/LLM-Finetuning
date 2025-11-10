@@ -39,6 +39,8 @@ setup(
         "deepspeed",
         "python-json-logger",
         "wandb",
+        "huggingface-hub",
+        "python-dotenv"
     ],
         
 )

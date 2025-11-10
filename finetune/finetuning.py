@@ -1,11 +1,9 @@
 import os
 from pathlib import Path
 import traceback
-import sys
 
 
 from .data_preprocessing import CustomDataset
-from .inference import get_merged_model
 
 import torch
 from datasets import load_dataset
@@ -17,9 +15,12 @@ from transformers import (
 from peft import LoraConfig, prepare_model_for_kbit_training, PeftModel
 from trl import SFTTrainer, SFTConfig
 import yaml
-from transformers.models.gemma3.modeling_gemma3 import Gemma3DecoderLayer, Gemma3RMSNorm
-from transformers import PaliGemmaProcessor, PaliGemmaForConditionalGeneration
-from typing import Callable
+
+from huggingface_hub import login
+from dotenv import load_dotenv
+load_dotenv()
+# Login to Hugging Face Hub
+login(token=os.getenv("HF_LOGIN_TOKEN"))
 
 
 class Trainer:
