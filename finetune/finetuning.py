@@ -16,11 +16,11 @@ from peft import LoraConfig, prepare_model_for_kbit_training, PeftModel
 from trl import SFTTrainer, SFTConfig
 import yaml
 
-from huggingface_hub import login
-from dotenv import load_dotenv
-load_dotenv()
-# Login to Hugging Face Hub
-login(token=os.getenv("HF_LOGIN_TOKEN"))
+# from huggingface_hub import login
+# from dotenv import load_dotenv
+# load_dotenv()
+# # Login to Hugging Face Hub
+# login(token=os.getenv("HF_LOGIN_TOKEN"))
 
 
 class Trainer:
