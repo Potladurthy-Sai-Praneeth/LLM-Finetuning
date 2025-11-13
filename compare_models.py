@@ -284,7 +284,8 @@ class ModelComparator:
                 'ground_truth': sample['ground_truth'],
                 'base_model_response': base_response,
                 'finetuned_model_response': finetuned_response,
-                'image_size': sample['image'].size
+                'image_size': sample['image'].size,
+                'image': sample['image']  # Keep PIL image for saving later
             }
             
             results.append(result)
@@ -303,7 +304,7 @@ class ModelComparator:
     
     def save_results(self, results: list, output_file: str):
         """
-        Save comparison results to JSON file
+        Save comparison results to JSON file and images
         
         Args:
             results: List of comparison results
@@ -311,11 +312,25 @@ class ModelComparator:
         """
         print(f"\nSaving results to: {output_file}")
         
-        # Prepare data for JSON (remove PIL images)
+        # Create images directory
+        output_dir = os.path.dirname(output_file) if os.path.dirname(output_file) else '.'
+        images_dir = os.path.join(output_dir, 'comparison_images')
+        os.makedirs(images_dir, exist_ok=True)
+        
+        # Prepare data for JSON and save images
         json_results = []
-        for result in results:
+        for idx, result in enumerate(results):
+            # Save image
+            image_filename = f"sample_{result['sample_id']}_img{idx+1}.png"
+            image_path = os.path.join(images_dir, image_filename)
+            result['image'].save(image_path)
+            
+            # Create JSON entry with image path
             json_result = {k: v for k, v in result.items() if k != 'image'}
+            json_result['image_path'] = os.path.relpath(image_path, output_dir)
             json_results.append(json_result)
+        
+        print(f"✓ Saved {len(results)} images to: {images_dir}")
         
         # Add metadata
         output_data = {
@@ -363,7 +378,12 @@ class ModelComparator:
                 f.write(f"{'='*80}\n\n")
                 
                 f.write(f"Sample ID: {result['sample_id']}\n")
-                f.write(f"Image Size: {result['image_size']}\n\n")
+                f.write(f"Image Size: {result['image_size']}\n")
+                
+                # Add image path if available
+                if 'image_path' in result:
+                    f.write(f"Image Path: {result['image_path']}\n")
+                f.write("\n")
                 
                 f.write(f"QUESTION:\n{result['question']}\n\n")
                 
