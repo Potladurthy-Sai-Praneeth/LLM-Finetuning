@@ -19,11 +19,7 @@ from trl import SFTTrainer, SFTConfig
 import yaml
 import wandb
 wandb.init(mode="disabled")
-# from huggingface_hub import login
-# from dotenv import load_dotenv
-# load_dotenv()
-# # Login to Hugging Face Hub
-# login(token=os.getenv("HF_LOGIN_TOKEN"))
+
 
 class Trainer:
     """Handles DeepSpeed training setup and execution"""

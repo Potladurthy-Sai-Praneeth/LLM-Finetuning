@@ -24,23 +24,6 @@ setup(
     python_requires=">3.8,<=3.12",
     
     # Dependencies
-    install_requires=[
-        "transformers",
-        "peft",
-        "accelerate",
-        "trl",
-        "bitsandbytes",
-        "datasets",
-        "torch",
-        "torchvision",
-        "torchaudio",
-        "pillow",
-        "PyYAML",
-        "deepspeed",
-        "python-json-logger",
-        "wandb",
-        "huggingface-hub",
-        "python-dotenv"
-    ],
+    install_requires=[],
         
 )
