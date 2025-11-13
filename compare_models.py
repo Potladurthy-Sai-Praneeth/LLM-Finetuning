@@ -21,22 +21,25 @@ import yaml
 class ModelComparator:
     """Compare base and fine-tuned models on multimodal tasks"""
     
-    def __init__(self, base_model_id: str, adapter_path: str, config: dict):
+    def __init__(self, base_model_id: str, chat_model_id: str, adapter_path: str, config: dict):
         """
         Initialize the comparator
         
         Args:
             base_model_id: HuggingFace model ID for base model
+            chat_model_id: HuggingFace model ID for chat model
             adapter_path: Path to trained LoRA adapter
             config: Configuration dictionary
         """
         self.base_model_id = base_model_id
+        self.chat_model_id = chat_model_id
         self.adapter_path = adapter_path
         self.config = config
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
         print(f"Using device: {self.device}")
         print(f"Base Model: {base_model_id}")
+        print(f"Chat Model: {chat_model_id}")
         print(f"Adapter Path: {adapter_path}")
         
     def load_base_model(self):
@@ -409,6 +412,13 @@ def main():
         help="Base model ID (default: from config.yaml)"
     )
     parser.add_argument(
+        "--chat_model",
+        type=str,
+        default="google/gemma-3-4b-it",
+        help="Chat model ID (default: from config.yaml)"
+    )
+
+    parser.add_argument(
         "--num_samples",
         type=int,
         default=5,
@@ -452,7 +462,7 @@ def main():
     print("\n" + "="*80)
     print("GEMMA 3 MODEL COMPARISON")
     print("="*80)
-    comparator = ModelComparator(base_model_id, args.adapter_path, config)
+    comparator = ModelComparator(base_model_id, args.chat_model, args.adapter_path, config)
     
     # Load models
     comparator.load_base_model()
