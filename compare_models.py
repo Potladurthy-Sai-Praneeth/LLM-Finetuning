@@ -405,7 +405,7 @@ def main():
     parser.add_argument(
         "--base_model",
         type=str,
-        default=None,
+        default="google/gemma-3-4b-pt",
         help="Base model ID (default: from config.yaml)"
     )
     parser.add_argument(
