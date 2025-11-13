@@ -56,7 +56,7 @@ class ModelComparator:
         )
         
         self.base_processor = AutoProcessor.from_pretrained(
-            self.base_model_id,
+            self.chat_model_id,
             trust_remote_code=True
         )
         
@@ -90,7 +90,7 @@ class ModelComparator:
         
         # Use same processor
         self.finetuned_processor = AutoProcessor.from_pretrained(
-            self.base_model_id,
+            self.chat_model_id,
             trust_remote_code=True
         )
         
