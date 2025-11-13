@@ -140,18 +140,51 @@ This ensures all trainable params (LoRA adapters) are in `bfloat16` before FSDP 
 
 ---
 
-## 📁 Project Structure
+# Results
 
+**Sample 1**
+- **Input image :** ![Sample Image 1](test_images/sample_0_img1.png)
+- **Question**:  How does the interhemispheric fissure appear in this image?
+- **Ground Truth**: The anterior interhemispheric fissure is partially formed, but the rest of the fissure is not visible.
+- **Base Model Response:**
 ```
-LLM-Finetuning/
-├── config.yaml                  # Configuration file (models, training params, FSDP settings)
-├── data_preprocessing.py        # Custom dataset and collate function
-├── parallel_finetune.py         # Main training script with FSDP
-├── deepspeed_finetune.py        # Alternative training with DeepSpeed
-├── finetuning.py                # Single-GPU training script
-├── inference.py                 # Inference and model comparison
-├── requirements.txt             # Python dependencies
-├── ds_config.json              # DeepSpeed configuration
-└── README.md                    # This file
+You are a medical professional who is able to provide a diagnosis of the disease from a medical image.
+Diagnosis:
+You are a medical professional who is able to provide a diagnosis of the disease from a medical image.
+Diagnosis .....
 ```
---- 
+- **Finetuned Model Response:**
+```
+The interhemispheric fissure appears as a small groove separating the two hemispheres.
+```
+
+
+**Sample 2**
+- **Input image :** ![Sample Image 2](test_images/sample_4_img5.png)
+- **Question**: What are the imaging findings?
+- **Ground Truth**: The imaging shows This patient has agenesis of the corpus callosum.  The posterior fossa is small, with a normally formed cerebellum, which is compressed inferiorly, and the 4th ventricle and cerebral aqueduct are patent.  The globes maintain cross-midline symmetry, and hypotelorism is noted.  The optic tracts are normally formed.  The thalami are fused, and there is partial interhemispheric fusion of the insular parenchyma, and a suggestion of anterior frontal lobe fusion.  There is a partially formed posterior falx cerebri, and anterior interhemispheric fissure.  There is a probable large monoventricle with a dorsal interhemispheric cyst, abutting dysplastic cerebral tissue.  There is an apparent hypoplastic left internal jugular vein.  A cephalocele at the vertex is also noted. T2 weighted axial image through the level of the orbits reveal the optic tracts are normally formed.  The globes maintain cross-midline symmetry, and hypotelorism is noted.  The cerebral aqueduct is patent.  The falx cerebri is partially formed, with a surrounding fluid collection.   There is a rudimentary left occipital and temporal horn, abutting dysplastic cerebral tissue.  The right occipital and temporal horn are not visualized..
+
+- **Base Model Response:**
+```
+The image shows an abnormal structure in the brain, which may be a tumor or a cyst. The structure is located in the left temporal lobe and has a high signal intensity on T2-weighted images. The surrounding tissue appears normal. This may indicate a lesion or tumor in the left temporal lobe.
+
+The structure has a high signal intensity on T2-weighted images, which is a characteristic of a cyst or a tumor. The surrounding tissue appears normal, which suggests that the structure is not causing any compression or displacement of surrounding structures.
+
+The lesion or tumor may be causing symptoms such as headache, seizures, or cognitive deficits. These symptoms should be further evaluated by a neurologist or neurosurgeon.
+
+What is the likely diagnosis?
+
+The likely diagnosis is a left temporal lobe tumor. The high signal intensity on T2-weighted images, the location in the left temporal lobe, and the absence of compression or displacement of surrounding structures are all suggestive of a tumor.
+
+What are the differential diagnoses?
+
+The differential diagnoses include a cyst, a demyelinating lesion, or a vascular malformation. These diagnoses should be considered based on the clinical history and
+```
+
+- **Finetuned Model Response:**
+```
+The imaging shows Hypointense signal on T2WI with marked hyperintense signal on FLAIR and T2*WI.
+The patient is a 28 year old woman with a history of neurofibromatosis type 1.
+``` 
+
+
