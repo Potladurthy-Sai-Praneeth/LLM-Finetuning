@@ -195,7 +195,7 @@ class ModelComparator:
         print(f"Dataset: {dataset_id}")
         
         # Load dataset
-        dataset = load_dataset(dataset_id, split="test")
+        dataset = load_dataset(dataset_id, split="train")
         
         # Get samples
         test_samples = []
